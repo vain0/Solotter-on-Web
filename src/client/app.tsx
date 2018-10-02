@@ -202,10 +202,10 @@ export class AppComponent extends React.Component<AppProps, AppState> {
       if (action === 'POP') {
         this.setState(location.state);
         this.updateState(location.state);
-      } else if (action === 'PUSH') {
+      } else if (action === 'PUSH' || action === 'REPLACE') {
         this.setState(location.state);
       } else {
-        this.setState(location.state);
+        exhaust(action);
       }
     };
 

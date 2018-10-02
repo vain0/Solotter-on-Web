@@ -1,5 +1,6 @@
 import * as assert from 'assert';
 import { serveTests } from './server/serve';
+import { utilsTests } from './utils';
 import { test, describe } from 'mocha';
 import UniversalRouter from 'universal-router';
 
@@ -14,6 +15,7 @@ test('hello', () => {
 });
 
 describe('serveTests', () => serveTests(toolkit));
+describe('utilsTests', () => utilsTests(toolkit));
 
 describe('JavaScript', () => {
   describe('String', () => {

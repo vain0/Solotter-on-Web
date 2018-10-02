@@ -14,7 +14,7 @@
     "dev:client-build": "cross-env NODE_ENV=development webpack --mode development --watch --progres",
     "dev:server-build": "tsc --watch --preserveWatchOutput",
     "dev:server-serve": "cross-env NODE_ENV=development nodemon ./index.js --watch ./dist/server",
-    "dev:test": "cross-env NODE_ENV=development mocha ./dist/index.spec.js --watch",
+    "dev:test": "cross-env NODE_ENV=development mocha ./dist/index.spec.js --watch ./dist/*.js ./server/*",
     "prod": "run-s prod:*",
     "prod:client-build": "cross-env NODE_ENV=production webpack --mode production",
     "prod:server-build": "tsc",

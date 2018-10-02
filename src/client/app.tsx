@@ -52,10 +52,10 @@ const initState: FullState = {
 };
 
 const toSignMail = (state: SignState) =>
-  merge(state, { pathname: '/sign/email', area: 'sign', sign: { phase: 'mail' } });
+  merge(state, { area: 'sign', sign: { phase: 'mail' } });
 
 const toSignPassword = (state: SignState) =>
-  merge(state, { pathname: '/sign/password', area: 'sign', sign: { phase: 'password' } });
+  merge(state, { area: 'sign', sign: { phase: 'password' } });
 
 const resolveRoute = async (state: FullState): Promise<FullState> => {
   const path = state.pathname;
@@ -113,10 +113,10 @@ const advance = async (state: SignState): Promise<SignState> => {
 
   if (phase === 'mail') {
     console.log({ 'mail to password': state });
-    return merge(state, { pathname: '/sign/password', sign: { phase: 'password' } });
+    return merge(state, { sign: { phase: 'password' } });
   } else if (phase === 'password') {
     console.log({ 'password to edit': state });
-    return merge(state, { pathname: '/', auth: true });
+    return merge(state, { auth: true, area: 'edit' });
   } else {
     return exhaust(phase);
   }
@@ -171,15 +171,12 @@ export class AppRootComponent extends React.Component<AppProps, FullState> {
   private async updateState(nextState: NextState<FullState>) {
     const { history } = this.props;
 
-    console.log({ 0: 'before update', state: this.state, nextState });
+    const prevState = this.state;
+    const updated = await nextState(prevState);
+    const reversed = { ...updated, pathname: reverseRoute(updated) };
+    const state = await resolveRoute(reversed);
 
-    let state = await nextState(this.state);
-
-    console.log({ 1: 'before resolve', state });
-
-    state = await resolveRoute(state);
-
-    console.log({ 0: 'before history update', state, location: history.location });
+    console.log({ prevState, updated, state, location: history.location });
 
     const p = history.location.pathname;
     if (state.pathname !== p) {
@@ -201,7 +198,7 @@ export class AppRootComponent extends React.Component<AppProps, FullState> {
       }
     };
 
-    // Initial redirect.
+    // 最初のリダイレクトを実行する。
     // Here we prior URL over React state.
     (async () => {
       const givenState: FullState = {
@@ -210,7 +207,8 @@ export class AppRootComponent extends React.Component<AppProps, FullState> {
         pathname: history.location.pathname,
       };
 
-      const state = await resolveRoute(givenState);
+      const resolved = await resolveRoute(givenState);
+      const state = { ...resolved, pathname: reverseRoute(resolved) };
 
       console.log({ 'initial redirect': state, givenState });
 

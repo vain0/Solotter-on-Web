@@ -1,36 +1,16 @@
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
-import { Hello } from './HelloComponent';
 import * as H from 'history';
-import UniversalRouter from 'universal-router';
 import { Patch, merge } from '../utils';
 
-// Extension.
-declare module 'universal-router' {
-  interface Route<C extends Context = any, R = any> {
-    result?: R;
-  }
-}
+// App models.
 
 type AppArea = 'sign' | 'edit';
 
-interface State {
-  pathname: string;
-}
-
-interface AppState extends State {
-  area: AppArea;
-  auth: boolean;
-}
-
-interface AppProps {
-  history: H.History;
-  router: UniversalRouter<RouteContext<AppState>, RouteResult<AppState>>;
-}
-
 type SignPhase = 'mail' | 'password';
 
-interface SignState extends State {
+interface SignState {
+  pathname: string;
   area: AppArea;
   auth: boolean;
   sign: {
@@ -40,53 +20,106 @@ interface SignState extends State {
   };
 }
 
-type Awaitable<T> =
-  | Promise<T>
-  | T
-  | undefined;
+interface State {
+  pathname: string;
+  area: AppArea;
+  auth: boolean;
+}
 
-type NextState<S> = (state: S) => Promise<Patch<S>>;
+type FullState =
+  State
+  & SignState;
+
+type NextState<S> = (state: S) => Promise<S>;
 
 type Sink<S> = (nextState: NextState<S>) => void;
 
-interface RouteContext<S extends State> {
-  pathname: string;
-  state: S;
-  patch: Patch<S>;
+interface AppProps {
+  history: H.History;
 }
-
-type RouteResult<S extends State> =
-  | { patch: Patch<S> }
-  | { redirect: Patch<S> };
-
-// update state:
-// resolve + set state
-
-// history listen:
-// push なら set state
-// pop なら set state + update state
 
 const exhaust = (x: never): never => x;
 
-const advance = async (state: SignState): Promise<Patch<SignState>> => {
+const initState: FullState = {
+  pathname: '/sign',
+  area: 'sign',
+  auth: false,
+  sign: {
+    phase: 'mail',
+    mail: '',
+    password: '',
+  },
+};
+
+const toSignMail = (state: SignState) =>
+  merge(state, { pathname: '/sign/email', area: 'sign', sign: { phase: 'mail' } });
+
+const toSignPassword = (state: SignState) =>
+  merge(state, { pathname: '/sign/password', area: 'sign', sign: { phase: 'password' } });
+
+const resolveRoute = async (state: FullState): Promise<FullState> => {
+  const path = state.pathname;
+
+  if (path.startsWith('/sign')) {
+    if (path === '/sign/mail') {
+      return toSignMail(state);
+    } else if (path === '/sign/password') {
+      return toSignPassword(state);
+    } else {
+      return toSignMail(state);
+    }
+  }
+
+  // Require auth.
+  if (!state.auth) {
+    return toSignMail(state);
+  }
+
+  if (path === '/') {
+    return merge(state, { area: 'edit' });
+  }
+
+  throw '404';
+};
+
+const reverseRoute = (state: FullState) => {
+  const area = state.area;
+  if (area === 'sign') {
+    const phase = state.sign.phase;
+    if (phase === 'mail') {
+      return '/sign/mail';
+    } else if (phase === 'password') {
+      return '/sign/password';
+    } else {
+      return exhaust(phase);
+    }
+  } else if (area === 'edit') {
+    return '/';
+  } else {
+    return state.auth ? '/' : '/sign/mail';
+  }
+};
+
+const setMail = (mail: string) => async (state: SignState) => {
+  return merge(state, { sign: { mail } });
+};
+
+const setPassword = (password: string) => async (state: SignState) => {
+  return merge(state, { sign: { password } });
+};
+
+const advance = async (state: SignState): Promise<SignState> => {
   const phase = state.sign.phase;
 
   if (phase === 'mail') {
     console.log({ 'mail to password': state });
-    return { pathname: '/sign/password', sign: { phase: 'password' } };
+    return merge(state, { pathname: '/sign/password', sign: { phase: 'password' } });
   } else if (phase === 'password') {
     console.log({ 'password to edit': state });
-    return { pathname: '/', auth: true };
+    return merge(state, { pathname: '/', auth: true });
   } else {
     return exhaust(phase);
   }
-};
-
-const setMail = (mail: string) => async (_state: SignState) => {
-  return { sign: { mail } };
-};
-const setPassword = (password: string) => async (_state: SignState) => {
-  return { sign: { password } };
 };
 
 const renderSign = (state: SignState, sink: Sink<SignState>) => {
@@ -128,55 +161,23 @@ const renderSign = (state: SignState, sink: Sink<SignState>) => {
   );
 };
 
-export class AppComponent extends React.Component<AppProps, AppState> {
+export class AppRootComponent extends React.Component<AppProps, FullState> {
   constructor(props: AppProps) {
     super(props);
 
-    const initState: AppState & SignState = {
-      pathname: '/sign',
-      area: 'sign',
-      auth: false,
-      sign: {
-        phase: 'mail',
-        mail: '',
-        password: '',
-      },
-    };
     this.state = initState;
   }
 
-  private redirectLimit = 0;
-
-  private async updateState(nextState: NextState<State>) {
-    const { history, router } = this.props;
+  private async updateState(nextState: NextState<FullState>) {
+    const { history } = this.props;
 
     console.log({ 0: 'before update', state: this.state, nextState });
 
-    const patch = await nextState(this.state);
-    let state = merge(this.state, patch);
+    let state = await nextState(this.state);
 
-    let result: RouteResult<State>;
-    while (true) {
-      console.log({ 1: 'before resolve', state, patch });
+    console.log({ 1: 'before resolve', state });
 
-      result = await router.resolve({
-        pathname: state.pathname,
-        state,
-      });
-
-      console.log({ 3: 'resolved', result });
-
-      if ('redirect' in result) {
-        if (++this.redirectLimit > 10) {
-          throw 'Infinite redirect loop';
-        }
-        state = merge(state, result.redirect);
-        continue;
-      } else {
-        state = merge(state, result.patch);
-        break;
-      }
-    }
+    state = await resolveRoute(state);
 
     console.log({ 0: 'before history update', state, location: history.location });
 
@@ -189,38 +190,42 @@ export class AppComponent extends React.Component<AppProps, AppState> {
   }
 
   componentDidMount() {
-    const { props: { history, router } } = this;
+    const { props: { history } } = this;
 
     const handle: H.LocationListener = (location, action) => {
       console.log({ location, action });
       if (action === 'POP' || action === 'PUSH' || action === 'REPLACE') {
         this.setState(location.state);
       } else {
-        exhaust(action);
+        return exhaust(action);
       }
     };
 
     // Initial redirect.
     // Here we prior URL over React state.
-    {
-      const state = {
+    (async () => {
+      const givenState: FullState = {
         ...(history.location.state || {}),
         ...this.state,
         pathname: history.location.pathname,
       };
 
-      history.replace(state.pathname, state);
-    }
+      const state = await resolveRoute(givenState);
 
-    history.listen(handle);
+      console.log({ 'initial redirect': state, givenState });
+
+      history.replace(state.pathname, state);
+
+      history.listen(handle);
+    })();
   }
 
   render() {
     const { area } = this.state;
-    const sink = (nextState: NextState<any>) => this.updateState(nextState);
+    const sink = (nextState: NextState<FullState>) => this.updateState(nextState);
 
     if (area === 'sign') {
-      return renderSign(this.state as any, sink as Sink<SignState>);
+      return renderSign(this.state, sink);
     } else if (area === 'edit') {
       return (<span> Edit page. </span>);
     } else {
@@ -229,72 +234,11 @@ export class AppComponent extends React.Component<AppProps, AppState> {
   }
 }
 
-const signRouter = new UniversalRouter<RouteContext<SignState>, RouteResult<SignState>>([
-  {
-    path: '/sign/mail',
-    result: {
-      patch: {
-        area: 'sign',
-        sign: { phase: 'mail' },
-      },
-    },
-  },
-  {
-    path: '/sign/password',
-    result: {
-      patch: {
-        area: 'sign',
-        sign: { phase: 'password' },
-      },
-    },
-  },
-  {
-    path: '(.*)',
-    result: {
-      redirect: { pathname: '/sign/mail' },
-    },
-  },
-], {
-    resolveRoute(context): Promise<RouteResult<SignState>> | undefined {
-      return context.route.result;
-    },
-  });
-
 const main = () => {
   const history = H.createBrowserHistory();
-  const router = new UniversalRouter<RouteContext<AppState>, RouteResult<State>>([
-    {
-      path: ['/sign', '/sign/(.*)'],
-      async action(context) {
-        return await signRouter.resolve(context);
-      },
-    },
-    {
-      path: '(.*)',
-      async action({ state, next }) {
-        if (!state.auth) {
-          return { redirect: { pathname: '/sign' } };
-        } else {
-          return next();
-        }
-      },
-    },
-    {
-      path: '',
-      async action({ state }) {
-        return { patch: { ...state, area: 'edit' } };
-      },
-    },
-    {
-      path: '(.*)',
-      async action() {
-        throw '404';
-      },
-    },
-  ]);
 
   ReactDOM.render(
-    <AppComponent history={history} router={router} />,
+    <AppRootComponent history={history} />,
     document.getElementById('app'),
   );
 };

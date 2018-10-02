@@ -5,6 +5,13 @@ import * as H from 'history';
 import UniversalRouter from 'universal-router';
 import { Patch, merge } from '../utils';
 
+// Extension.
+declare module 'universal-router' {
+  interface Route<C extends Context = any, R = any> {
+    result?: R;
+  }
+}
+
 type AppArea = 'sign' | 'edit';
 
 interface State {
@@ -24,6 +31,7 @@ interface AppProps {
 type SignPhase = 'mail' | 'password';
 
 interface SignState extends State {
+  area: AppArea;
   auth: boolean;
   sign: {
     phase: SignPhase;
@@ -44,11 +52,12 @@ type Sink<S> = (nextState: NextState<S>) => void;
 interface RouteContext<S extends State> {
   pathname: string;
   state: S;
+  patch: Patch<S>;
 }
 
 type RouteResult<S extends State> =
-  | { redirect: Patch<S> }
-  | { state: Patch<S> };
+  | { patch: Patch<S> }
+  | { redirect: Patch<S> };
 
 // update state:
 // resolve + set state
@@ -164,7 +173,7 @@ export class AppComponent extends React.Component<AppProps, AppState> {
         state = merge(state, result.redirect);
         continue;
       } else {
-        state = merge(state, result.state);
+        state = merge(state, result.patch);
         break;
       }
     }
@@ -223,33 +232,33 @@ export class AppComponent extends React.Component<AppProps, AppState> {
 const signRouter = new UniversalRouter<RouteContext<SignState>, RouteResult<SignState>>([
   {
     path: '/sign/mail',
-    async action({ state }) {
-      return {
-        state: {
-          area: 'sign',
-          sign: { phase: 'mail' as SignPhase },
-        },
-      };
+    result: {
+      patch: {
+        area: 'sign',
+        sign: { phase: 'mail' },
+      },
     },
   },
   {
     path: '/sign/password',
-    async action({ state }) {
-      return {
-        state: {
-          area: 'sign',
-          sign: { phase: 'password' as SignPhase },
-        },
-      };
+    result: {
+      patch: {
+        area: 'sign',
+        sign: { phase: 'password' },
+      },
     },
   },
   {
     path: '(.*)',
-    async action() {
-      return { redirect: { pathname: '/sign/mail' } };
+    result: {
+      redirect: { pathname: '/sign/mail' },
     },
   },
-]);
+], {
+    resolveRoute(context): Promise<RouteResult<SignState>> | undefined {
+      return context.route.result;
+    },
+  });
 
 const main = () => {
   const history = H.createBrowserHistory();
@@ -273,7 +282,13 @@ const main = () => {
     {
       path: '',
       async action({ state }) {
-        return { state: { ...state, area: 'edit' } };
+        return { patch: { ...state, area: 'edit' } };
+      },
+    },
+    {
+      path: '(.*)',
+      async action() {
+        throw '404';
       },
     },
   ]);

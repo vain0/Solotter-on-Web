@@ -2,6 +2,13 @@ import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import * as H from 'history';
 import { Patch, merge } from '../utils';
+import UniversalRouter, { Context, ActionContext } from 'universal-router';
+
+declare module 'universal-router' {
+  interface Route<C extends Context, R = any> {
+    result?: R;
+  }
+}
 
 // App models.
 
@@ -57,12 +64,28 @@ const toSignMail = (state: SignState) =>
 const toSignPassword = (state: SignState) =>
   merge(state, { area: 'sign', sign: { phase: 'password' } });
 
+// [Example of breadcrumbs? · Issue #36 · kriasoft/universal-router](https://github.com/kriasoft/universal-router/issues/36#issuecomment-289240177)
+const router = new UniversalRouter<{ state: FullState }, Patch<FullState>>([
+  {
+    path: '/sign/mail',
+    result: {
+      area: 'sign',
+      sign: { phase: 'mail' },
+    },
+  },
+], {
+    resolveRoute(context) {
+      const r = context.route.result;
+      return r && merge(context.state, r);
+    },
+  });
+
 const resolveRoute = async (state: FullState): Promise<FullState> => {
   const path = state.pathname;
 
   if (path.startsWith('/sign')) {
     if (path === '/sign/mail') {
-      return toSignMail(state);
+      return;
     } else if (path === '/sign/password') {
       return toSignPassword(state);
     } else {

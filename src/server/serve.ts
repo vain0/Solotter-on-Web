@@ -1,3 +1,4 @@
+import { config as dotEnvConfig } from 'dotenv';
 import express from 'express';
 import { NextFunction, Request, Response } from 'express';
 import * as path from 'path';
@@ -30,10 +31,26 @@ const serverRoute = (req: Request, res: Response, next: NextFunction) => {
 };
 
 export const serve = () => {
-  const hostname = 'localhost';
+  dotEnvConfig();
+
+  const hostname = process.env.HOSTNAME || 'localhost';
   const port = +(process.env.PORT || '8080');
   const distDir = path.normalize(process.env.DIST_DIR || './dist');
   const publicDir = path.normalize(distDir + '/public');
+
+  const twitterConfig = {
+    callbackURI: process.env.TWITTER_OAUTH_CALLBACK_URI!,
+    adminAuth: {
+      consumer_key: process.env.TWITTER_CONSUMER_KEY!,
+      consumer_secret: process.env.TWITTER_CONSUMER_SECRET!,
+      token: process.env.TWITTER_ACCESS_TOKEN!,
+      token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET!,
+    },
+    userAuth: {
+      consumer_key: process.env.TWITTER_CONSUMER_KEY!,
+      consumer_secret: process.env.TWITTER_CONSUMER_SECRET!,
+    },
+  };
 
   const app = express();
 

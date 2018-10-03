@@ -19,31 +19,31 @@ type RouteResult =
 
 export const serverRouter = new Router<RouteContext, RouteResult>([
   {
-    path: '/api',
-    children: [
-      {
-        path: '/twitter-auth-callback',
-        async action() {
-          return { json: { accessToken: '1' } };
-        },
-      },
-      {
-        path: '(.*)',
-        async action(context) {
-          // Require valid authorization header.
-          if (context.auth === undefined) {
-            return { json: { forbidden: 'bad' } };
-          }
-          return await context.next();
-        },
-      },
-      {
-        path: '/hello',
-        async action() {
-          return { json: { hello: 'world' } };
-        },
-      },
-    ],
+    path: '/api/twitter-auth-callback',
+    async action() {
+      return { json: { accessToken: '1' } };
+    },
+  },
+  {
+    // Require valid authorization header.
+    path: '(.*)',
+    async action(context) {
+      if (context.auth === undefined) {
+        return { json: { forbidden: 'bad' } };
+      }
+      return await context.next();
+    },
+  },
+  {
+    path: '/api/tweet',
+    async action(context) {
+    },
+  },
+  {
+    path: '/api/hello',
+    async action() {
+      return { json: { hello: 'world' } };
+    },
   },
   {
     path: '(.*)',

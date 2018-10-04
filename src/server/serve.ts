@@ -1,11 +1,14 @@
 import { config as dotEnvConfig } from 'dotenv';
 import express from 'express';
 import { NextFunction, Request, Response } from 'express';
-import { OAuth } from 'oauth';
 import * as path from 'path';
 import serveStatic from 'serve-static';
-import { TwitterConfig } from '../types';
-import { ServerRouter, serverRouterWith } from './routing';
+import { exhaust } from '../utils';
+import { oauthServiceWith } from './infra-twitter';
+import {
+  ServerRouter,
+  serverRouterWith,
+} from './routing';
 import { TestSuite } from './testing';
 
 const parseAuthHeader = (a: string | undefined): string | undefined => {
@@ -13,50 +16,55 @@ const parseAuthHeader = (a: string | undefined): string | undefined => {
   return s[0] === 'Bearer' && s[1] || undefined;
 };
 
-const exhaust = (x: never) => x;
-
-const oauthClientWith = (twitterConfig: TwitterConfig) =>
-  new OAuth(
-    'https://twitter.com/oauth/request_token',
-    'https://twitter.com/oauth/access_token',
-    twitterConfig.adminAuth.consumer_key,
-    twitterConfig.adminAuth.consumer_secret,
-    '1.0',
-    twitterConfig.callbackURI,
-    'HMAC-SHA1',
-  );
-
 const serverRouteWith =
-  (serverRouter: ServerRouter) =>
-    (req: Request, res: Response, next: NextFunction) => {
-      const auth = parseAuthHeader(req.headers.authorization);
+  (serverRouter: ServerRouter) => (req: Request, res: Response, next: NextFunction) => {
+    const auth = parseAuthHeader(req.headers.authorization);
 
-      console.error({ path: req.path, query: req.query, body: req.query });
+    console.error({ path: req.path, query: req.query, body: req.query });
 
-      serverRouter.resolve({
-        pathname: req.path,
-        body: req.body,
-        query: req.query,
-        auth,
-      }).then(result => {
-        if (result === undefined || result === null) {
-          return res.sendStatus(200);
-        } else if ('redirect' in result) {
-          return res.redirect(301, result.redirect);
-        } else if ('next' in result) {
-          return next();
-        } else if ('json' in result) {
-          return res.json(result.json);
-        } else {
-          return exhaust(result);
-        }
-      }).catch(err => {
-        console.error({ err });
-        return res.sendStatus(500);
-      });
-    };
+    serverRouter.resolve({
+      pathname: req.path,
+      body: req.body,
+      query: req.query,
+      auth,
+    }).then(result => {
+      if (result === undefined || result === null) {
+        return res.sendStatus(200);
+      } else if ('redirect' in result) {
+        return res.redirect(301, result.redirect);
+      } else if ('next' in result) {
+        return next();
+      } else if ('json' in result) {
+        return res.json(result.json);
+      } else {
+        return exhaust(result);
+      }
+    }).catch(err => {
+      console.error({ err });
+      return res.sendStatus(500);
+    });
+  };
 
-export const serve = () => {
+interface ServeProps {
+  port: number;
+  publicDir: string;
+  serverRoute: express.RequestHandler;
+}
+
+export const serve = (props: ServeProps) => {
+  const { port, publicDir, serverRoute } = props;
+  const app = express();
+
+  app.use(serverRoute);
+  app.use(serveStatic(publicDir));
+
+  app.listen(port, () => {
+    console.log(`Serves ${publicDir}`);
+    console.log(`Start listening http://localhost:${port}/`);
+  });
+};
+
+export const bootstrap = () => {
   dotEnvConfig();
 
   const host = process.env.HOST || 'localhost';
@@ -83,18 +91,14 @@ export const serve = () => {
     consumer_key: twitterConfig.adminAuth.consumer_key,
   });
 
-  const oauthClient = oauthClientWith(twitterConfig);
-  const serverRouter = serverRouterWith(oauthClient, twitterConfig);
+  const oauthService = oauthServiceWith(twitterConfig);
+  const serverRouter = serverRouterWith(oauthService);
   const serverRoute = serverRouteWith(serverRouter);
 
-  const app = express();
-
-  app.use(serverRoute);
-  app.use(serveStatic(publicDir));
-
-  app.listen(port, () => {
-    console.log(`Serves ${publicDir}`);
-    console.log(`Start listening http://${host}:${port}/`);
+  serve({
+    port,
+    publicDir,
+    serverRoute,
   });
 };
 

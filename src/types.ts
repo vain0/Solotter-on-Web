@@ -1,4 +1,4 @@
-interface OAuthInfo {
+export interface TwitterAuth {
   consumer_key: string;
   consumer_secret: string;
   token: string;
@@ -7,8 +7,8 @@ interface OAuthInfo {
 
 export interface TwitterConfig {
   callbackURI: string;
-  adminAuth: OAuthInfo;
-  userAuth?: OAuthInfo;
+  adminAuth: TwitterAuth;
+  userAuth?: TwitterAuth;
   oauthState?: {
     token: string,
     token_secret: string,

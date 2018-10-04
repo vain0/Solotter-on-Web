@@ -24,16 +24,16 @@ type RouteResult =
 
 export type ServerRouter = Router<RouteContext, RouteResult>;
 
-const oauthRequest = (oauthClient: OAuth, twitterConfig: TwitterConfig) => {
+export const oauthRequest = (oauthClient: OAuth, twitterConfig: TwitterConfig) => {
   return new Promise<RouteResult>((resolve, reject) => {
     oauthClient.getOAuthRequestToken((err, token, token_secret) => {
       if (err) {
         return reject(err);
       }
 
-      const redirectURI = `https://twitter.com/oauth/authenticate?oauth_token=${token}`;
+      const redirectURI = `https://api.twitter.com/oauth/authenticate?oauth_token=${token}`;
 
-      // FIXME: 書き換えない
+      // FIXME: use local storage per client
       twitterConfig.oauthState = { token, token_secret };
 
       resolve({ redirect: redirectURI });
@@ -41,7 +41,7 @@ const oauthRequest = (oauthClient: OAuth, twitterConfig: TwitterConfig) => {
   });
 };
 
-const oauthCallback = (oauthClient: OAuth, twitterConfig: TwitterConfig, verifier: string) => {
+export const oauthCallback = (oauthClient: OAuth, twitterConfig: TwitterConfig, verifier: string) => {
   return new Promise<RouteResult>((resolve, reject) => {
     if (!twitterConfig.oauthState) {
       return reject('Invalid auth flow.');
@@ -56,7 +56,7 @@ const oauthCallback = (oauthClient: OAuth, twitterConfig: TwitterConfig, verifie
 
         const userAuth = { ...twitterConfig.adminAuth, token, token_secret };
 
-        // FIXME: 書き換えない
+        // FIXME: use local storage per client
         twitterConfig.userAuth = userAuth;
 
         resolve({ redirect: '/' });
@@ -66,7 +66,7 @@ const oauthCallback = (oauthClient: OAuth, twitterConfig: TwitterConfig, verifie
 
 export const serverRouterWith = (oauthClient: OAuth, twitterConfig: TwitterConfig) => new Router<RouteContext, RouteResult>([
   {
-    path: 'api/twitter-auth-request',
+    path: '/api/twitter-auth-request',
     action: () => oauthRequest(oauthClient, twitterConfig),
   },
   {
@@ -80,7 +80,7 @@ export const serverRouterWith = (oauthClient: OAuth, twitterConfig: TwitterConfi
     },
   },
   {
-    // Require valid authorization header.
+    // Except for the above two, we require valid authorization header.
     path: '(.*)',
     async action(context) {
       if (context.auth === undefined) {

@@ -35,36 +35,41 @@ export const play = async () => {
   };
 
   if (!Object.keys(oauth).every(k => (oauth as any)[k])) {
-    throw 'Set up .env';
+    return console.error('Set up .env');
   }
 
   const oauthClient = oauthClientWith(twitterConfig);
 
   const app = express();
   const router = express.Router();
-  router.post('/api/auth/twitter-callback', (req, res) => {
-    console.log(`callback request: ${req}`);
 
-    const verifier = req.query.oauth_verifier as string | undefined;
-    if (!verifier) {
-      throw 'Invalid auth flow';
-    }
+  router.post('/api/auth/twitter-callback', (req, res) => {
+    console.log({ 'callback request': req });
+
+    const verifier = req.query.oauth_verifier as string;
+    console.log({ verifier });
+    // if (!verifier) {
+    //   throw 'Invalid auth flow';
+    // }
 
     oauthCallback(oauthClient, twitterConfig, verifier).then(result => {
       return res.sendStatus(200);
-    });
+    }).catch(console.error);
   });
+
   router.all('(.*)', (req, res) => {
-    console.log(`request: ${req}`);
+    console.log({ req });
     return res.sendStatus(200);
   });
+
   app.use(router);
+
   app.listen(port, hostname, () => {
     console.log(`Start listening http://${hostname}:${port}/`);
 
     oauthRequest(oauthClient, twitterConfig).then(r => {
-      console.log(`Route result ${r}`);
-    });
+      console.log({ 'route result': r });
+    }).catch(console.error);
   });
 };
 

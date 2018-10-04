@@ -31,7 +31,7 @@ export const oauthRequest = (oauthClient: OAuth, twitterConfig: TwitterConfig) =
         return reject(err);
       }
 
-      const redirectURI = `https://api.twitter.com/oauth/authenticate?oauth_token=${token}`;
+      const redirectURI = `https://twitter.com/oauth/authenticate?oauth_token=${token}`;
 
       // FIXME: use local storage per client
       twitterConfig.oauthState = { token, token_secret };

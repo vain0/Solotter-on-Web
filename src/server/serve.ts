@@ -31,6 +31,8 @@ const serverRouteWith =
     (req: Request, res: Response, next: NextFunction) => {
       const auth = parseAuthHeader(req.headers.authorization);
 
+      console.error({ req });
+
       serverRouter.resolve({
         pathname: req.path,
         body: req.body,
@@ -48,16 +50,19 @@ const serverRouteWith =
         } else {
           return exhaust(result);
         }
-      }).catch(next);
+      }).catch(err => {
+        console.error({ err });
+        return res.sendStatus(500);
+      });
     };
 
 export const serve = () => {
   dotEnvConfig();
 
-  const hostname = process.env.HOSTNAME || 'localhost';
+  const host = process.env.HOST || 'localhost';
   const port = +(process.env.PORT || '8080');
-  const distDir = path.normalize(process.env.DIST_DIR || './dist');
-  const publicDir = path.normalize(distDir + '/public');
+  const distDir = path.resolve(process.env.DIST_DIR || '.', 'dist');
+  const publicDir = path.resolve(distDir, 'public');
 
   const twitterConfig = {
     callbackURI: process.env.TWITTER_OAUTH_CALLBACK_URI!,
@@ -78,9 +83,9 @@ export const serve = () => {
   app.use(serverRoute);
   app.use(serveStatic(publicDir));
 
-  app.listen(port, hostname, () => {
+  app.listen(port, host, () => {
     console.log(`Serves ${publicDir}`);
-    console.log(`Start listening http://${hostname}:${port}/`);
+    console.log(`Start listening http://${host}:${port}/`);
   });
 };
 

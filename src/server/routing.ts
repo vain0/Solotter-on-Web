@@ -74,7 +74,7 @@ export const serverRouterWith = (oauthClient: OAuth, twitterConfig: TwitterConfi
     async action(context) {
       const verifier = (context.query as any).oauth_verifier as string | undefined;
       if (!verifier) {
-        throw 'Invalid auth flow';
+        return { json: { err: 'Invalid auth flow' } };
       }
       return await oauthCallback(oauthClient, twitterConfig, verifier);
     },

@@ -19,8 +19,8 @@ const oauthClientWith = (twitterConfig: TwitterConfig) =>
 export const play = async () => {
   dotEnvConfig();
 
-  const hostname = 'localhost';
-  const port = 8080;
+  const hostname = process.env.HOST!;
+  const port = +process.env.PORT!;
 
   const oauth = {
     consumer_key: process.env.TWITTER_CONSUMER_KEY!,
@@ -30,7 +30,7 @@ export const play = async () => {
   };
 
   const twitterConfig = {
-    callbackURI: 'http://localhost/api/auth/twitter-callback',
+    callbackURI: process.env.TWITTER_OAUTH_CALLBACK_URI!,
     adminAuth: oauth,
   };
 
@@ -44,10 +44,10 @@ export const play = async () => {
   const router = express.Router();
 
   router.post('/api/auth/twitter-callback', (req, res) => {
-    console.log({ 'callback request': req });
+    console.error({ 'callback request': req });
 
     const verifier = req.query.oauth_verifier as string;
-    console.log({ verifier });
+    console.error({ verifier });
     // if (!verifier) {
     //   throw 'Invalid auth flow';
     // }
@@ -58,17 +58,17 @@ export const play = async () => {
   });
 
   router.all('(.*)', (req, res) => {
-    console.log({ req });
+    console.error({ req });
     return res.sendStatus(200);
   });
 
   app.use(router);
 
   app.listen(port, hostname, () => {
-    console.log(`Start listening http://${hostname}:${port}/`);
+    console.error(`Start listening http://${hostname}:${port}/`);
 
     oauthRequest(oauthClient, twitterConfig).then(r => {
-      console.log({ 'route result': r });
+      console.error({ 'route result': r });
     }).catch(console.error);
   });
 };

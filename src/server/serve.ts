@@ -31,7 +31,7 @@ const serverRouteWith =
     (req: Request, res: Response, next: NextFunction) => {
       const auth = parseAuthHeader(req.headers.authorization);
 
-      console.error({ req });
+      console.error({ path: req.path, query: req.query, body: req.query });
 
       serverRouter.resolve({
         pathname: req.path,

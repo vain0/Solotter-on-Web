@@ -74,6 +74,15 @@ export const serve = () => {
     },
   };
 
+  console.error({
+    host,
+    port,
+    distDir,
+    publicDir,
+    callback: twitterConfig.callbackURI,
+    consumer_key: twitterConfig.adminAuth.consumer_key,
+  });
+
   const oauthClient = oauthClientWith(twitterConfig);
   const serverRouter = serverRouterWith(oauthClient, twitterConfig);
   const serverRoute = serverRouteWith(serverRouter);
@@ -83,7 +92,7 @@ export const serve = () => {
   app.use(serverRoute);
   app.use(serveStatic(publicDir));
 
-  app.listen(port, host, () => {
+  app.listen(port, () => {
     console.log(`Serves ${publicDir}`);
     console.log(`Start listening http://${host}:${port}/`);
   });

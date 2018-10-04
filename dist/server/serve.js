@@ -66,13 +66,21 @@ exports.serve = () => {
             token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET,
         },
     };
+    console.error({
+        host,
+        port,
+        distDir,
+        publicDir,
+        callback: twitterConfig.callbackURI,
+        consumer_key: twitterConfig.adminAuth.consumer_key,
+    });
     const oauthClient = oauthClientWith(twitterConfig);
     const serverRouter = routing_1.serverRouterWith(oauthClient, twitterConfig);
     const serverRoute = serverRouteWith(serverRouter);
     const app = express_1.default();
     app.use(serverRoute);
     app.use(serve_static_1.default(publicDir));
-    app.listen(port, host, () => {
+    app.listen(port, () => {
         console.log(`Serves ${publicDir}`);
         console.log(`Start listening http://${host}:${port}/`);
     });

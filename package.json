@@ -19,7 +19,8 @@
     "prod:client-build": "cross-env NODE_ENV=production webpack --mode production",
     "prod:server-build": "tsc",
     "prod:server-serve": "cross-env NODE_ENV=production node ./index.js",
-    "prod:test": "cross-env NODE_ENV=production mocha ./dist/index.spec.js"
+    "prod:test": "cross-env NODE_ENV=production mocha ./dist/index.spec.js",
+    "heroku": "yarn run prod:server-build && git add . && git add --force dist/*.js && git commit -m Update && git push"
   },
   "devDependencies": {
     "@types/mocha": "^5.2.5",

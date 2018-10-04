@@ -24,7 +24,7 @@ const exhaust = (x) => x;
 const oauthClientWith = (twitterConfig) => new oauth_1.OAuth('https://twitter.com/oauth/request_token', 'https://twitter.com/oauth/access_token', twitterConfig.adminAuth.consumer_key, twitterConfig.adminAuth.consumer_secret, '1.0', twitterConfig.callbackURI, 'HMAC-SHA1');
 const serverRouteWith = (serverRouter) => (req, res, next) => {
     const auth = parseAuthHeader(req.headers.authorization);
-    console.error({ req });
+    console.error({ path: req.path, query: req.query, body: req.query });
     serverRouter.resolve({
         pathname: req.path,
         body: req.body,

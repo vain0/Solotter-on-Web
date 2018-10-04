@@ -8,7 +8,7 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "start": "npm run prod",
+    "start": "node index.js",
     "test": "run-s prod:server-build prod:test",
     "dev": "run-p dev:*",
     "dev:client-build": "cross-env NODE_ENV=development webpack --mode development --watch --progres",

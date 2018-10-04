@@ -1,0 +1,1 @@
+{"version":3,"file":"HelloComponent.js","sourceRoot":"","sources":["../../src/client/HelloComponent.tsx"],"names":[],"mappings":";;;;;;;;;AAAA,6CAA+B;AAO/B,MAAa,KAAM,SAAQ,KAAK,CAAC,SAAyB;IACxD,MAAM;QACJ,OAAO;;YAAgB,IAAI,CAAC,KAAK,CAAC,QAAQ;;YAAO,IAAI,CAAC,KAAK,CAAC,SAAS;gBAAO,CAAC;IAC/E,CAAC;CACF;AAJD,sBAIC"}

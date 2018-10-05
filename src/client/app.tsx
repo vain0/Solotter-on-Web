@@ -3,54 +3,60 @@ import * as ReactDOM from 'react-dom';
 import * as H from 'history';
 import uuid from 'uuid/v4';
 
+interface PageKey {
+  pathname: string;
+  pageId: string;
+}
+
+const pageKeyStr = ({ pathname, pageId }: PageKey) =>
+  `${pathname}?pageId=${pageId}`;
+
 class HistoryController {
+  // page id -> history
   historyMap: Map<string, H.History> = new Map();
-  historyIdFromPageId: Map<string, string> = new Map();
 
-  connect(historyId: string, pageId: string, history: H.History) {
-    this.historyMap.set(historyId, history);
-    this.historyIdFromPageId.set(pageId, historyId);
+  connect(page: PageKey, history: H.History) {
+    this.historyMap.set(page.pageId, history);
   }
 
-  push(prevPageId: string, pageId: string, state: unknown) {
-    const historyId = this.historyIdFromPageId.get(prevPageId);
-    const history = historyId && this.historyMap.get(historyId);
-
-    if (!historyId || !history) {
-      throw new Error('Invalid page id.');
-    }
-
-    // history.push()
-
-    this.historyIdFromPageId.set(pageId, historyId);
-    window.sessionStorage.setItem(pageId, JSON.stringify(state));
-  }
-
-  replace(pageId: string, state: unknown) {
-    const historyId = this.historyIdFromPageId.get(pageId);
-    const history = historyId && this.historyMap.get(historyId);
-
-    if (!historyId || !history) {
-      throw new Error('Invalid page id.');
-    }
-
-    history.replace(history.location.pathname, state);
-
-    this.historyIdFromPageId.set(pageId, historyId);
-    window.sessionStorage.setItem(pageId, JSON.stringify(state));
-  }
-
-  pop(pageId: string): unknown {
-    const history = this.historyIdFromPageId.get(pageId);
+  push(prev: PageKey, next: PageKey, state: unknown) {
+    const history = this.historyMap.get(prev.pageId);
     if (!history) {
       throw new Error('Invalid page id.');
     }
 
-    const state = window.sessionStorage.getItem(pageId);
-    if (!state) {
+    this.historyMap.set(next.pageId, history);
+    window.sessionStorage.setItem(pageKeyStr(next), JSON.stringify(state));
+    history.push(next.pathname, next.pageId);
+  }
+
+  replace(next: PageKey, state: unknown) {
+    const history = this.historyMap.get(next.pageId);
+    if (!history) {
       throw new Error('Invalid page id.');
     }
-    return state;
+
+    this.historyMap.set(next.pageId, history);
+    window.sessionStorage.setItem(pageKeyStr(next), JSON.stringify(state));
+    history.replace(next.pathname, next.pageId);
+  }
+
+  pop(page: PageKey): unknown {
+    const history = this.historyMap.get(page.pageId);
+    console.log({ 0: history });
+    if (!history) {
+      return undefined;
+    }
+
+    const state = window.sessionStorage.getItem(pageKeyStr(page));
+    console.log({ 1: state });
+    if (!state) {
+      return undefined;
+    }
+
+    const t = JSON.parse(state);
+    console.log({ 2: t });
+    return t;
   }
 }
 
@@ -109,6 +115,18 @@ class Sign extends React.PureComponent<SignProps, SignState> {
     this.state = initSignState;
   }
 
+  componentWillReceiveProps(prev: SignProps, next: SignProps) {
+    if (prev.pageId === next.pageId) return;
+
+    const { pageId } = this.props;
+    const pathname = '/sign';
+
+    const state = historyController.pop({ pathname, pageId }) as SignState | undefined;
+    if (state) {
+      this.setState(state);
+    }
+  }
+
   private onMailChange(ev: React.ChangeEvent<HTMLInputElement>) {
     this.setState({ mail: ev.target.value });
   }
@@ -118,10 +136,15 @@ class Sign extends React.PureComponent<SignProps, SignState> {
   }
 
   private onSubmit(ev: React.FormEvent<HTMLFormElement>) {
-    const { phase } = this.state;
+    const { props: { pageId }, state: { phase } } = this;
+    const page = { pathname: '/sign', pageId };
+
     if (phase === 'mail') {
       ev.preventDefault();
-      this.setState({ phase: 'password' });
+      historyController.replace(page, this.state);
+      this.setState({ phase: 'password' }, () => {
+        historyController.push(page, { pathname: '/', pageId: uuid() }, this.state);
+      });
     } else if (phase === 'password') {
       // jump with form
     } else {
@@ -192,9 +215,28 @@ export class AppRootComponent extends React.Component<AppProps, AppState> {
   constructor(props: AppProps) {
     super(props);
 
-    const { pageId } = props;
+    const { pageId } = this.props;
 
     this.state = initAppState(pageId);
+  }
+
+  componentDidMount() {
+    const { loading } = this.state;
+
+    if (loading) {
+    }
+  }
+
+  componentWillReceiveProps(prev: AppProps, next: AppProps) {
+    if (prev.pageId === next.pageId) return;
+
+    const { pageId } = this.props;
+    const pathname = '/';
+
+    const state = historyController.pop({ pathname, pageId }) as AppState | undefined;
+    if (state) {
+      this.setState(state);
+    }
   }
 
   render() {
@@ -229,16 +271,27 @@ export class AppRootComponent extends React.Component<AppProps, AppState> {
 }
 
 const main = () => {
+  const appElement = document.getElementById('app');
   const history = H.createBrowserHistory();
-  const historyId = uuid();
-  const pageId = uuid();
 
-  historyController.connect(historyId, pageId, history);
+  let pathname = history.location.pathname;
+  let pageId = uuid();
 
-  ReactDOM.render(
-    <AppRootComponent pageId={pageId} />,
-    document.getElementById('app'),
-  );
+  historyController.connect({ pathname, pageId }, history);
+
+  const render = (location: H.Location) => {
+    console.log({ location, pageId });
+    ReactDOM.render(
+      <AppRootComponent pageId={pageId} />,
+      appElement,
+    );
+  };
+
+  history.listen((location, action) => {
+    pageId = location.state;
+    render(location);
+  });
+  render(history.location);
 };
 
 main();

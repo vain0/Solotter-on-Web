@@ -1,6 +1,7 @@
 import express from 'express';
 import serveStatic from 'serve-static';
 import * as path from 'path';
+import * as fs from 'fs';
 import { TestSuite } from './testing';
 import { serverRouter } from './routing';
 import cookieSession from 'cookie-session';
@@ -51,21 +52,25 @@ const serverRoute: express.RequestHandler = (req, res, next) => {
 export const serve = () => {
   const hostname = 'localhost';
   const port = +(process.env.PORT || '8080');
-  const distDir = path.normalize(process.env.DIST_DIR || './dist');
-  const publicDir = path.normalize(distDir + '/public');
+  const distDir = path.resolve(__dirname, '../../dist');
+  const publicDir = path.resolve(distDir, 'public');
   const cookieSecret = process.env.COOKIE_SECRET!;
 
-  const app = express();
+  const indexHtml = path.resolve(publicDir, 'index.html');
 
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
-  app.all('*', serverRoute);
-  app.use(serveStatic(publicDir));
+  const app = express();
+  const serveFile = serveStatic(publicDir, { fallthrough: true });
+
   app.use(cookieSession({
     keys: [cookieSecret],
     domain: hostname,
     maxAge: 24 * 60 * 60 * 1000,
   }));
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+  app.use(serveFile);
+  app.all('*', serverRoute);
+  app.use((_req, res) => res.sendFile(indexHtml));
 
   app.listen(port, () => {
     console.log(`Serves ${publicDir}`);

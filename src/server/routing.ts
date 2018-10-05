@@ -19,24 +19,28 @@ type RouteResult =
   | { login: AccessUser }
   | void;
 
+const login = (body: {
+  mail: string;
+  password: string;
+}) => {
+  const { mail, password } = body;
+
+  if (!(mail === 'u@x.jp' && password === 'pass')) {
+    return { json: { err: 'Invalid mail or password' } };
+  }
+
+  const accessUser = {
+    accessToken: '1',
+    displayName: 'John Doe',
+  };
+  return { login: accessUser };
+};
+
 export const serverRouter = new Router<RouteContext, RouteResult>([
   {
     path: '/sign/login',
     action(context) {
-      const { mail, password } = context.body as {
-        mail: string;
-        password: string;
-      };
-
-      if (!(mail === 'u@x.jp' && password === 'pass')) {
-        return { json: { err: 'Invalid mail or password' } };
-      }
-
-      const accessUser = {
-        accessToken: '1',
-        displayName: 'John Doe',
-      };
-      return { login: accessUser };
+      return login(context.body);
     },
   },
   {

@@ -1,10 +1,7 @@
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import * as H from 'history';
-import { Patch, merge } from '../utils';
 import uuid from 'uuid/v4';
-
-const freshPageId = () => uuid();
 
 class HistoryController {
   historyMap: Map<string, H.History> = new Map();
@@ -105,10 +102,6 @@ const initAppState = (pageId: string): AppState => ({
 
 const exhaust = (x: never): never => x;
 
-const resolveRoute = async (state: AppState): Promise<AppState> => {
-  throw '404';
-};
-
 class Sign extends React.PureComponent<SignProps, SignState> {
   constructor(props: SignProps) {
     super(props);
@@ -179,7 +172,10 @@ class Sign extends React.PureComponent<SignProps, SignState> {
     return (
       <article key='sign-component'>
         <h2>Sign</h2>
-        <form action='' method='POST' onSubmit={ev => this.onSubmit(ev)}>
+        <form
+          action='/sign/login'
+          method='POST'
+          onSubmit={ev => this.onSubmit(ev)}>
           {this.renderContent()}
           <button>Submit</button>
         </form>

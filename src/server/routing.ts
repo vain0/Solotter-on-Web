@@ -8,17 +8,37 @@ interface AccessUser {
 
 interface RouteContext {
   method: 'GET' | 'POST';
-  query: {};
-  body: {};
+  query: any;
+  body: any;
   accessToken?: string;
 }
 
 type RouteResult =
   | { json: unknown }
   | { next: boolean }
+  | { login: AccessUser }
   | void;
 
 export const serverRouter = new Router<RouteContext, RouteResult>([
+  {
+    path: '/sign/login',
+    action(context) {
+      const { mail, password } = context.body as {
+        mail: string;
+        password: string;
+      };
+
+      if (!(mail === 'u@x.jp' && password === 'pass')) {
+        return { json: { err: 'Invalid mail or password' } };
+      }
+
+      const accessUser = {
+        accessToken: '1',
+        displayName: 'John Doe',
+      };
+      return { login: accessUser };
+    },
+  },
   {
     path: '/api/twitter-auth-callback',
     action() {

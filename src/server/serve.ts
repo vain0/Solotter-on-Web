@@ -20,7 +20,7 @@ interface Session {
 }
 
 const serverRoute: express.RequestHandler = (req, res, next) => {
-  const { accessUser } = req.session as Session;
+  const accessUser = (req.session as Session || {}).accessUser;
 
   serverRouter.resolve({
     pathname: req.path,
@@ -34,14 +34,17 @@ const serverRoute: express.RequestHandler = (req, res, next) => {
     if ('json' in result) {
       return res.json(result.json);
     }
-    if (!('next' in result)) {
-      return exhaust(result);
+    if ('login' in result) {
+      req.session = {
+        ...req.session,
+        accessUser: result.login,
+      };
+      return res.redirect('/');
     }
-
-    if (accessUser) {
-      req.session = { ...req.session, accessUser };
+    if ('next' in result) {
+      return next();
     }
-    return next();
+    return exhaust(result);
   }).catch(next);
 };
 
@@ -54,10 +57,12 @@ export const serve = () => {
 
   const app = express();
 
-  app.use(serverRoute);
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+  app.all('*', serverRoute);
   app.use(serveStatic(publicDir));
   app.use(cookieSession({
-    secret: cookieSecret,
+    keys: [cookieSecret],
     domain: hostname,
     maxAge: 24 * 60 * 60 * 1000,
   }));

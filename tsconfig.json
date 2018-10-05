@@ -14,7 +14,8 @@
     "jsx": "react",
     "moduleResolution": "node",
     "esModuleInterop": true,
-    "strict": true
+    "strict": true,
+    "preserveWatchOutput": true
   },
   "include": [
     "./src/**/*"

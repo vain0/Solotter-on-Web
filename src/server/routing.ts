@@ -1,49 +1,45 @@
 import Router from 'universal-router';
 import { Context } from 'universal-router';
 
-interface RouteResultJson {
-  json: {};
+interface AccessUser {
+  accessToken: string;
+  displayName: string;
 }
 
 interface RouteContext {
   method: 'GET' | 'POST';
   query: {};
   body: {};
-  auth: string | undefined;
+  accessToken?: string;
 }
 
 type RouteResult =
-  | RouteResultJson
+  | { json: unknown }
   | { next: boolean }
   | void;
 
 export const serverRouter = new Router<RouteContext, RouteResult>([
   {
-    path: '/api',
-    children: [
-      {
-        path: '/twitter-auth-callback',
-        async action() {
-          return { json: { accessToken: '1' } };
-        },
-      },
-      {
-        path: '(.*)',
-        async action(context) {
-          // Require valid authorization header.
-          if (context.auth === undefined) {
-            return { json: { forbidden: 'bad' } };
-          }
-          return await context.next();
-        },
-      },
-      {
-        path: '/hello',
-        async action() {
-          return { json: { hello: 'world' } };
-        },
-      },
-    ],
+    path: '/api/twitter-auth-callback',
+    action() {
+      return { next: true };
+    },
+  },
+  {
+    path: '/api/(.*)',
+    action(context) {
+      // Require valid authorization header.
+      if (context.accessToken === undefined) {
+        return { json: { forbidden: 'bad' } };
+      }
+      return context.next();
+    },
+  },
+  {
+    path: '/api/hello',
+    async action() {
+      return { json: { hello: 'world' } };
+    },
   },
   {
     path: '(.*)',

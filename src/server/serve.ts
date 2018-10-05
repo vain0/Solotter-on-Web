@@ -1,31 +1,47 @@
 import express from 'express';
-import { Request, Response, NextFunction } from 'express';
 import serveStatic from 'serve-static';
 import * as path from 'path';
 import { TestSuite } from './testing';
 import { serverRouter } from './routing';
+import cookieSession from 'cookie-session';
 
 const parseAuthHeader = (a: string | undefined): string | undefined => {
   const s = a && a.split(' ') || [];
   return s[0] === 'Bearer' && s[1] || undefined;
 };
 
-const serverRoute = (req: Request, res: Response, next: NextFunction) => {
-  const auth = parseAuthHeader(req.headers.authorization);
+const exhaust = (x: never) => x;
+
+interface Session {
+  accessUser?: {
+    accessToken: string;
+    displayName: string;
+  };
+}
+
+const serverRoute: express.RequestHandler = (req, res, next) => {
+  const { accessUser } = req.session as Session;
 
   serverRouter.resolve({
     pathname: req.path,
     body: req.body,
     query: req.query,
-    auth,
+    accessUser,
   }).then(result => {
     if (result === undefined || result === null) {
       return res.sendStatus(200);
-    } else if ('next' in result) {
-      return next();
-    } else {
+    }
+    if ('json' in result) {
       return res.json(result.json);
     }
+    if (!('next' in result)) {
+      return exhaust(result);
+    }
+
+    if (accessUser) {
+      req.session = { ...req.session, accessUser };
+    }
+    return next();
   }).catch(next);
 };
 
@@ -34,13 +50,19 @@ export const serve = () => {
   const port = +(process.env.PORT || '8080');
   const distDir = path.normalize(process.env.DIST_DIR || './dist');
   const publicDir = path.normalize(distDir + '/public');
+  const cookieSecret = process.env.COOKIE_SECRET!;
 
   const app = express();
 
   app.use(serverRoute);
   app.use(serveStatic(publicDir));
+  app.use(cookieSession({
+    secret: cookieSecret,
+    domain: hostname,
+    maxAge: 24 * 60 * 60 * 1000,
+  }));
 
-  app.listen(port, hostname, () => {
+  app.listen(port, () => {
     console.log(`Serves ${publicDir}`);
     console.log(`Start listening http://${hostname}:${port}/`);
   });

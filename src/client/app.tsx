@@ -2,6 +2,48 @@ import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import * as H from 'history';
 import { Patch, merge } from '../utils';
+import uuid from 'uuid/v4';
+
+const freshPageId = () => uuid();
+
+class HistoryController {
+  historyMap: Map<string, H.History> = new Map();
+  historyIdFromPageId: Map<string, string> = new Map();
+
+  connect(historyId: string, history: H.History) {
+    this.historyMap.set(historyId, history);
+  }
+
+  disconnect(historyId: string) {
+    this.historyMap.delete(historyId);
+  }
+
+  push(historyId: string, pageId: string, state: unknown) {
+    const history = this.historyMap.get(historyId);
+    if (!history) {
+      throw new Error('Invalid page id.');
+    }
+    this.historyIdFromPageId.set(pageId, historyId);
+
+    window.sessionStorage.setItem(pageId, JSON.stringify(state));
+  }
+
+  pop(pageId: string): unknown {
+    const history = this.historyIdFromPageId.get(pageId);
+    if (!history) {
+      throw new Error('Invalid page id.');
+    }
+
+    const state = window.sessionStorage.getItem(pageId);
+    if (!state) {
+      throw new Error('Invalid page id.');
+    }
+    return state;
+  }
+}
+
+// Holy global var!
+const historyController = new HistoryController();
 
 // App models.
 
@@ -9,234 +51,231 @@ type AppArea = 'sign' | 'edit';
 
 type SignPhase = 'mail' | 'password';
 
+interface SignProps {
+  auth: boolean;
+}
+
 interface SignState {
+  phase: SignPhase;
+  mail: string;
+  password: string;
+}
+
+const initSignState: SignState = {
+  phase: 'mail',
+  mail: '',
+  password: '',
+};
+
+interface AppState {
+  historyId: string;
+  pageId: string;
   pathname: string;
-  area: AppArea;
-  auth: boolean;
-  sign: {
-    phase: SignPhase;
-    mail: string;
-    password: string;
-  };
-}
-
-interface State {
-  pathname: string;
-  area: AppArea;
   auth: boolean;
 }
 
-type FullState =
-  State
-  & SignState;
-
-type NextState<S> = (state: S) => Promise<S>;
-
-type Sink<S> = (nextState: NextState<S>) => void;
-
-interface AppProps {
-  history: H.History;
-}
+const initAppState = (historyId: string, pageId: string): AppState => ({
+  historyId,
+  pageId,
+  pathname: '/',
+  auth: false,
+});
 
 const exhaust = (x: never): never => x;
 
-const initState: FullState = {
-  pathname: '/sign',
-  area: 'sign',
-  auth: false,
-  sign: {
-    phase: 'mail',
-    mail: '',
-    password: '',
-  },
-};
+// const resolveRoute = async (state: FullState): Promise<FullState> => {
+//   const path = state.pathname;
 
-const toSignMail = (state: SignState) =>
-  merge(state, { area: 'sign', sign: { phase: 'mail' } });
+//   if (path.startsWith('/sign')) {
+//     if (path === '/sign/mail') {
+//       return toSignMail(state);
+//     } else if (path === '/sign/password') {
+//       return toSignPassword(state);
+//     } else {
+//       return toSignMail(state);
+//     }
+//   }
 
-const toSignPassword = (state: SignState) =>
-  merge(state, { area: 'sign', sign: { phase: 'password' } });
+//   // Require auth.
+//   if (!state.auth) {
+//     return toSignMail(state);
+//   }
 
-const resolveRoute = async (state: FullState): Promise<FullState> => {
-  const path = state.pathname;
+//   if (path === '/') {
+//     return merge(state, { area: 'edit' });
+//   }
 
-  if (path.startsWith('/sign')) {
-    if (path === '/sign/mail') {
-      return toSignMail(state);
-    } else if (path === '/sign/password') {
-      return toSignPassword(state);
-    } else {
-      return toSignMail(state);
-    }
-  }
+//   throw '404';
+// };
 
-  // Require auth.
-  if (!state.auth) {
-    return toSignMail(state);
-  }
+// const reverseRoute = (state: FullState) => {
+//   const area = state.area;
+//   if (area === 'sign') {
+//     const phase = state.sign.phase;
+//     if (phase === 'mail') {
+//       return '/sign/mail';
+//     } else if (phase === 'password') {
+//       return '/sign/password';
+//     } else {
+//       return exhaust(phase);
+//     }
+//   } else if (area === 'edit') {
+//     return '/';
+//   } else {
+//     return state.auth ? '/' : '/sign/mail';
+//   }
+// };
 
-  if (path === '/') {
-    return merge(state, { area: 'edit' });
-  }
+// const setMail = (mail: string) => async (state: SignState) => {
+//   return merge(state, { sign: { mail } });
+// };
 
-  throw '404';
-};
+// const setPassword = (password: string) => async (state: SignState) => {
+//   return merge(state, { sign: { password } });
+// };
 
-const reverseRoute = (state: FullState) => {
-  const area = state.area;
-  if (area === 'sign') {
-    const phase = state.sign.phase;
-    if (phase === 'mail') {
-      return '/sign/mail';
-    } else if (phase === 'password') {
-      return '/sign/password';
-    } else {
-      return exhaust(phase);
-    }
-  } else if (area === 'edit') {
-    return '/';
-  } else {
-    return state.auth ? '/' : '/sign/mail';
-  }
-};
+// const advance = async (state: SignState): Promise<SignState> => {
+//   const phase = state.sign.phase;
 
-const setMail = (mail: string) => async (state: SignState) => {
-  return merge(state, { sign: { mail } });
-};
+//   if (phase === 'mail') {
+//     console.log({ 'mail to password': state });
+//     return merge(state, { sign: { phase: 'password' } });
+//   } else if (phase === 'password') {
+//     console.log({ 'password to edit': state });
+//     return merge(state, { auth: true, area: 'edit' });
+//   } else {
+//     return exhaust(phase);
+//   }
+// };
 
-const setPassword = (password: string) => async (state: SignState) => {
-  return merge(state, { sign: { password } });
-};
+// const renderSign = (state: SignState, sink: Sink<SignState>) => {
+//   const renderContent = () => {
+//     const { sign: { mail, password, phase } } = state;
+//     if (phase === 'mail') {
+//       return (
+//         <section>
+//           <label>Mail Address</label>
+//           <input
+//             key='mail-input'
+//             type='email'
+//             value={mail}
+//             onChange={ev => sink(setMail(ev.target.value))} />
+//         </section>
+//       );
+//     } else if (phase === 'password') {
+//       return <section>
+//         <label>Password</label>
+//         <input
+//           key='password-input'
+//           type='password'
+//           value={password}
+//           onChange={ev => sink(setPassword(ev.target.value))} />
+//       </section>;
+//     } else {
+//       return exhaust(phase);
+//     }
+//   };
 
-const advance = async (state: SignState): Promise<SignState> => {
-  const phase = state.sign.phase;
+//   return (
+//     <article key='sign-component'>
+//       <h2>Sign</h2>
+//       <form onSubmit={ev => { ev.preventDefault(); sink(advance); }}>
+//         {renderContent()}
+//         <button>Submit</button>
+//       </form>
+//     </article>
+//   );
+// };
 
-  if (phase === 'mail') {
-    console.log({ 'mail to password': state });
-    return merge(state, { sign: { phase: 'password' } });
-  } else if (phase === 'password') {
-    console.log({ 'password to edit': state });
-    return merge(state, { auth: true, area: 'edit' });
-  } else {
-    return exhaust(phase);
-  }
-};
+// interface AppProps {
+//   historyId: string;
+// }
 
-const renderSign = (state: SignState, sink: Sink<SignState>) => {
-  const renderContent = () => {
-    const { sign: { mail, password, phase } } = state;
-    if (phase === 'mail') {
-      return (
-        <section>
-          <label>Mail Address</label>
-          <input
-            key='mail-input'
-            type='email'
-            value={mail}
-            onChange={ev => sink(setMail(ev.target.value))} />
-        </section>
-      );
-    } else if (phase === 'password') {
-      return <section>
-        <label>Password</label>
-        <input
-          key='password-input'
-          type='password'
-          value={password}
-          onChange={ev => sink(setPassword(ev.target.value))} />
-      </section>;
-    } else {
-      return exhaust(phase);
-    }
-  };
-
-  return (
-    <article key='sign-component'>
-      <h2>Sign</h2>
-      <form onSubmit={ev => { ev.preventDefault(); sink(advance); }}>
-        {renderContent()}
-        <button>Submit</button>
-      </form>
-    </article>
-  );
-};
-
-export class AppRootComponent extends React.Component<AppProps, FullState> {
-  constructor(props: AppProps) {
-    super(props);
-
-    this.state = initState;
-  }
-
-  private async updateState(nextState: NextState<FullState>) {
-    const { history } = this.props;
-
-    const prevState = this.state;
-    const updated = await nextState(prevState);
-    const reversed = { ...updated, pathname: reverseRoute(updated) };
-    const state = await resolveRoute(reversed);
-
-    console.log({ prevState, updated, state, location: history.location });
-
-    const p = history.location.pathname;
-    if (state.pathname !== p) {
-      history.push(state.pathname, state);
-    } else {
-      history.replace(state.pathname, state);
-    }
-  }
-
-  componentDidMount() {
-    const { props: { history } } = this;
-
-    const handle: H.LocationListener = (location, action) => {
-      console.log({ location, action });
-      if (action === 'POP' || action === 'PUSH' || action === 'REPLACE') {
-        this.setState(location.state);
-      } else {
-        return exhaust(action);
-      }
-    };
-
-    // 最初のリダイレクトを実行する。
-    // Here we prior URL over React state.
-    (async () => {
-      const givenState: FullState = {
-        ...(history.location.state || {}),
-        ...this.state,
-        pathname: history.location.pathname,
-      };
-
-      const resolved = await resolveRoute(givenState);
-      const state = { ...resolved, pathname: reverseRoute(resolved) };
-
-      console.log({ 'initial redirect': state, givenState });
-
-      history.replace(state.pathname, state);
-
-      history.listen(handle);
-    })();
-  }
-
-  render() {
-    const { area } = this.state;
-    const sink = (nextState: NextState<FullState>) => this.updateState(nextState);
-
-    if (area === 'sign') {
-      return renderSign(this.state, sink);
-    } else if (area === 'edit') {
-      return (<span> Edit page. </span>);
-    } else {
-      return exhaust(area);
-    }
-  }
+export class AppRootComponent extends React.Component<{}, {}> {
 }
+
+// export class AppRootComponent extends React.Component<AppProps, AppState> {
+//   constructor(props: AppProps) {
+//     super(props);
+
+//     const pageId = uuid();
+
+//     this.state = initAppState(props.historyId, pageId);
+//   }
+
+//   private async updateState(nextState) {
+//     const { history } = this.props;
+
+//     const prevState = this.state;
+//     const updated = await nextState(prevState);
+//     const reversed = { ...updated, pathname: reverseRoute(updated) };
+//     const state = await resolveRoute(reversed);
+
+//     console.log({ prevState, updated, state, location: history.location });
+
+//     const p = history.location.pathname;
+//     if (state.pathname !== p) {
+//       history.push(state.pathname, state);
+//     } else {
+//       history.replace(state.pathname, state);
+//     }
+//   }
+
+//   componentDidMount() {
+//     const { props: { historyId }, state: {pageId} } = this;
+
+//     const handle: H.LocationListener = (location, action) => {
+//       console.log({ location, action });
+//       if (action === 'PUSH') {
+//         const pageId = freshPageId();
+//         history.replace(location.pathname, pageId);
+//         this.setState({ pageId });
+//       } else {
+//         return exhaust(action);
+//       }
+//     };
+
+//     // 最初のリダイレクトを実行する。
+//     // Here we prior URL over React state.
+//     (async () => {
+//       const givenState: FullState = {
+//         ...(history.location.state || {}),
+//         ...this.state,
+//         pathname: history.location.pathname,
+//       };
+
+//       const resolved = await resolveRoute(givenState);
+//       const state = { ...resolved, pathname: reverseRoute(resolved) };
+
+//       console.log({ 'initial redirect': state, givenState });
+
+//       history.replace(state.pathname, state);
+
+//       history.listen(handle);
+//     })();
+//   }
+
+//   render() {
+//     const { area } = this.state;
+//     const sink = (nextState: NextState<FullState>) => this.updateState(nextState);
+
+//     if (area === 'sign') {
+//       return renderSign(this.state, sink);
+//     } else if (area === 'edit') {
+//       return (<span> Edit page. </span>);
+//     } else {
+//       return exhaust(area);
+//     }
+//   }
+// }
 
 const main = () => {
   const history = H.createBrowserHistory();
+  const historyId = uuid();
+  historyController.connect(historyId, history);
 
   ReactDOM.render(
-    <AppRootComponent history={history} />,
+    <AppRootComponent />,
     document.getElementById('app'),
   );
 };

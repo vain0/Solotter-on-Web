@@ -132,7 +132,7 @@ class HistoryController {
       this.pages.set(prev.pageId, { ...prevPage, status: 'REPLACE' });
       this.pages.set(next.pageId, nextPage);
     }
-    if (nextPage.status === 'RESTORE') {
+    if (nextPage.status !== 'PUSH') {
       const state = this.pop({ pathname, pageId: next.pageId }) as T | undefined;
       if (!state) {
         console.error(`couldn't load ${pageKeyStr({ pathname, pageId: next.pageId })}`);

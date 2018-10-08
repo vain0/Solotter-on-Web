@@ -2,10 +2,61 @@ import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import * as H from 'history';
 import uuid from 'uuid/v4';
+import UniversalRouter from 'universal-router';
+import { merge, Patch } from '../utils';
+
+// design conventions:
+
+// design url so that state is derived from new location (url + state) and,
+// vice versa, location (url + state) is derived from new state.
+
+// render phase, we don't modify component state,
+// i.e., authorization must be handled before render phase.
+
+// we don't want to use flux because it's too verbose for our tiny app.
+
+// we don't relay callbacks to bottom of component hierarchy,
+// because we want to avoid performance issue.
+
+// spec:
+
+// before login, whatever url you visit, we redirect you to /sign/.. (/mail by default).
+// after submit mail, transit to password form.
+// at this point, you can back to mail phase and input is filled with submitted mail.
+// submitted password, you get access token from server and saved locally.
+
+// if logged in or saved access token, you can access points out of /sign .
+// (you don't want to see loading...)
+// we want to display some data obtained by using access token (say, access user's display name).
+
+// impl:
+
+// on init,
+// retrieve access token from local storage,
+// if missing, redirect to /sign,
+// otherwise fetch access user's data.
+
+// add listener to history changes.
+// whenever location changed, restore component state using location state.
+
+// in sign,
+// whenever input changes, history replace.
+// when mail is submitted, history push and move to password phase.
+// when password is submitted, fetch access token (async),
+// and save access token to local storage.
+
+// model:
+//    area: which we display you to /sign or other.
+
+interface RouteContext {
+}
+
+type RouteResult =
+  | { redirect: string };
 
 // App models.
 
-type AppArea = 'sign' | 'edit';
+type LocId = string;
 
 type SignPhase = 'mail' | 'password';
 
@@ -15,7 +66,7 @@ interface AccessUser {
 }
 
 interface SignProps {
-  pageId: string;
+  locId: LocId;
 }
 
 interface SignState {
@@ -30,122 +81,195 @@ const initSignState: SignState = {
   password: '',
 };
 
-interface AppState {
-  pageId: string;
-  pathname: string;
+interface GlobalState {
+  locId: LocId;
   area: AppArea;
   loading: boolean;
   accessUser?: AccessUser;
 }
 
-const initAppState = (pageId: string): AppState => ({
-  pageId,
-  pathname: '/',
+interface LocalStates {
+  sign: SignState;
+  edit: {};
+}
+
+type AppArea = keyof LocalStates;
+
+type AppState = GlobalState;
+type FullState = GlobalState & LocalStates;
+
+const initGlobalState = (locId: string): GlobalState => ({
+  locId,
   area: 'sign',
   loading: true,
   accessUser: undefined,
 });
 
+const initFullState = (locId: LocId): FullState =>
+  ({
+    ...initGlobalState(locId),
+    sign: initSignState,
+    edit: {},
+  });
+
 const exhaust = (x: never): never => x;
 
+const resolveRouteSign = (pathname: string, state: SignState): SignState => {
+  const toSignMail = (state: SignState): SignState =>
+    ({ ...state, phase: 'mail' });
+
+  const toSignPassword = (state: SignState): SignState =>
+    ({ ...state, phase: 'password' });
+
+  if (pathname === '/sign/mail') {
+    return toSignMail(state);
+  } else if (pathname === '/sign/password') {
+    return toSignPassword(state);
+  } else {
+    return toSignMail(state);
+  }
+};
+
+const reverseRouteSign = (state: SignState): Pathname => {
+  const { phase } = state;
+  if (phase === 'mail') {
+    return '/sign/mail';
+  } else if (phase === 'password') {
+    return '/sign/password';
+  } else {
+    return exhaust(phase);
+  }
+};
+
+const resolveRoute = (pathname: string, state: FullState): FullState => {
+  if (pathname.startsWith('/sign')) {
+    return { ...state, area: 'sign', sign: resolveRouteSign(pathname, state.sign) };
+  }
+
+  // Require auth.
+  if (!state.accessUser) {
+    return { ...state, area: 'sign', sign: resolveRouteSign(pathname, state.sign) };
+  }
+
+  if (pathname === '/') {
+    return { ...state, area: 'edit' };
+  }
+
+  throw new Error('404');
+};
+
+const reverseRoute = (state: FullState) => {
+  const area = state.area;
+  if (area === 'sign' || !state.accessUser) {
+    return reverseRouteSign(state.sign);
+  } else {
+    return '/';
+  }
+};
+
 type Pathname = string;
-type PageId = string;
-type LocationState = PageId;
 
-interface PageKey {
-  pathname: Pathname;
-  pageId: PageId;
-}
-
-interface Page {
+type LocState = {
+  locId: LocId,
+  state?: FullState,
   history: H.History;
-  status: 'RESTORE' | 'PUSH' | 'REPLACE';
-}
+  didUpdate: (state: FullState) => void;
+};
 
-interface PageState<T> {
-  pageId: PageId;
-  state: T;
-}
-
-const pageKeyStr = ({ pathname, pageId }: PageKey) =>
-  `${pathname}?pageId=${(pageId || '')}`;
+type Loc = H.Location<LocState | undefined>;
 
 class HistoryController {
-  pages: Map<PageId, Page> = new Map();
+  locs: Map<LocId, Loc> = new Map();
 
-  connect(next: PageKey, history: H.History) {
-    console.log(`history controller connected: ${pageKeyStr(next)}`);
+  connect(
+    locId: string,
+    fullState: FullState,
+    history: H.History,
+    didUpdate: () => void,
+  ): LocId {
+    const loc = history.location as Loc;
+    const { pathname } = loc;
 
-    this.pages.set(next.pageId, { history, status: 'RESTORE' });
-    history.replace(next.pathname, next.pageId as LocationState);
+    const locState = { locId, state: fullState, history, didUpdate };
+    const initLoc = { ...loc, state: locState };
+
+    console.log(`history connect: ${pathname} ${locId}`, initLoc);
+    this.locs.set(locId, initLoc);
+
+    const nextLocId = this.push(locId, fullState);
+    return nextLocId;
   }
 
-  push(prev: PageKey, next: PageKey, state: unknown) {
-    console.log(`history controller push: ${pageKeyStr(prev)} -> ${pageKeyStr(next)}`);
+  private push(locId: LocId, midFullState: FullState): LocId {
+    const loc = this.locs.get(locId)!;
+    const { history, didUpdate } = loc.state!;
 
-    const prevPage = this.pages.get(prev.pageId);
-    if (!prevPage) throw new Error('Invalid page id.');
+    const nextLoc = history.location as Loc;
+    const nextLocId = nextLoc.state && nextLoc.state.locId || uuid();
+    const storedState = nextLoc.state && nextLoc.state.state;
+    const nextFullState = { ...midFullState, ...storedState, locId: nextLocId };
 
-    this.pages.set(next.pageId, { history: prevPage.history, status: 'PUSH' });
+    console.log(`history push ${loc.pathname} -> ${nextLoc.pathname} (${nextLocId})`, nextFullState);
+    this.locs.set(locId, merge(loc, { state: { state: nextFullState } }));
+    history.push(nextLoc.pathname, nextFullState);
+    didUpdate(nextFullState);
 
-    window.sessionStorage.setItem(pageKeyStr(next), JSON.stringify(state));
-    prevPage.history.push(next.pathname, next.pageId as LocationState);
-    console.log(`state saved: ${pageKeyStr(next)}`, state);
+    return nextLocId;
   }
 
-  private replace(next: PageKey, state: unknown) {
-    console.log(`history controller replace: ${pageKeyStr(next)}`);
+  private replace(locId: LocId, nextFullState: FullState): void {
+    const loc = this.locs.get(locId)!;
+    const { history } = loc.state!;
 
-    const nextPage = this.pages.get(next.pageId);
-    if (!nextPage) throw new Error('Invalid page id.');
-
-    window.sessionStorage.setItem(pageKeyStr(next), JSON.stringify(state));
-    console.log(`state saved ${pageKeyStr(next)}`, state);
+    console.log(`history replace ${loc.pathname}`, nextFullState);
+    this.locs.set(locId, merge(loc, { state: { state: nextFullState } }));
+    history.replace(loc.pathname, nextFullState);
   }
 
-  private pop(next: PageKey): unknown {
-    console.log(`history con pop: ${pageKeyStr(next)}`);
+  /**
+   * Gets next state for the area.
+   *
+   * If some state is saved in the controller, return it.
+   * Otherwise, just return given state.
+   */
+  getState<A extends keyof LocalStates, S extends LocalStates[A]>(locId: LocId, area: A, state: S): S {
+    console.log(`history getState ${locId} ${area}`, state);
 
-    const stateJson = window.sessionStorage.getItem(pageKeyStr(next));
-    const state = stateJson && JSON.parse(stateJson);
-    console.log(`state loaded ${pageKeyStr(next)}`, state);
-    return state;
+    const loc = this.locs.get(locId);
+    const storedState = loc && loc.state && loc.state.state && loc.state.state[area] as S;
+    if (!storedState) return state;
+
+    return merge(state, storedState as any);
   }
 
-  calc<T>(pathname: string, prev: PageState<T> | undefined, next: PageState<T>): T {
-    if (prev && prev.pageId === next.pageId) {
-      const page = this.pages.get(next.pageId)!;
-      this.pages.set(next.pageId, { ...page, status: 'REPLACE' });
-      this.replace({ pathname, pageId: next.pageId }, next.state);
-      console.log(`page now non-fresh: ` + next.pageId);
-      return next.state;
-    }
+  /**
+   * Components should call this after state changed.
+   * See `Sign.componentDidUpdate` for usage.
+   */
+  didUpdate<A extends keyof LocalStates, S extends LocalStates[A]>(
+    locId: LocId,
+    area: A,
+    state: S,
+  ): S {
+    console.log(`history didUpdate ${locId} ${area}`, state);
 
-    let nextPage = this.pages.get(next.pageId);
-    if (!nextPage) {
-      if (!prev) {
-        console.error('history broken');
-        return next.state;
-      }
-      const prevPage = this.pages.get(prev.pageId)!;
-      nextPage = { history: prevPage.history, status: 'RESTORE' };
-      this.pages.set(prev.pageId, { ...prevPage, status: 'REPLACE' });
-      this.pages.set(next.pageId, nextPage);
-    }
-    if (nextPage.status !== 'PUSH') {
-      const state = this.pop({ pathname, pageId: next.pageId }) as T | undefined;
-      if (!state) {
-        console.error(`couldn't load ${pageKeyStr({ pathname, pageId: next.pageId })}`);
-        return next.state;
-      }
+    const loc = this.locs.get(locId);
+    if (!loc) throw new Error(`Unknown locId ${locId}`);
+    if (!loc.state) throw new Error(`loc state is not saved ${locId}`);
+    const prevFullState = loc.state.state;
+    if (!prevFullState) throw new Error(`loc state full state is not saved ${locId}`);
 
-      this.pages.set(next.pageId, { ...nextPage, status: 'REPLACE' });
-      this.replace({ pathname, pageId: next.pageId }, next.state);
-      console.log(`page now non-fresh: ` + next.pageId);
+    const midFullState: FullState = { ...prevFullState, [area]: state };
+    const prevPathname = loc.pathname;
+    const nextPathname = reverseRoute(midFullState);
+
+    if (prevPathname === nextPathname) {
+      this.replace(locId, midFullState);
       return state;
+    } else {
+      const nextLocId = this.push(locId, midFullState);
+      return this.getState(nextLocId, area, state);
     }
-
-    return next.state;
   }
 }
 
@@ -156,33 +280,16 @@ class Sign extends React.PureComponent<SignProps, SignState> {
   constructor(props: SignProps) {
     super(props);
 
-    this.state = historyController.calc('/sign', undefined, {
-      pageId: props.pageId,
-      state: initSignState,
-    });
+    this.state = historyController.getState(props.locId, 'sign', initSignState);
   }
 
   componentDidUpdate(prevProps: SignProps, prevState: SignState) {
-    console.log('sign did update', { prevProps, props: this.props });
+    if (this.props === prevProps && this.state === prevState) return;
 
-    const nextState = historyController.calc(
-      '/sign', {
-        pageId: prevProps.pageId,
-        state: prevState,
-      }, {
-        pageId: this.props.pageId,
-        state: this.state,
-      });
-
-    if (this.state !== nextState) {
-      this.setState(nextState, () => {
-        console.log(`state restored`, nextState);
-      });
-    }
-  }
-
-  private get page() {
-    return { pathname: '/sign', pageId: this.props.pageId };
+    console.log('sign didUpdate', { prevProps, props: this.props });
+    this.setState(state => historyController.didUpdate(this.props.locId, 'sign', state), () => {
+      console.log(`sign setState end`, this.state);
+    });
   }
 
   private onMailChange(ev: React.ChangeEvent<HTMLInputElement>) {
@@ -195,12 +302,9 @@ class Sign extends React.PureComponent<SignProps, SignState> {
 
   private onSubmit(ev: React.FormEvent<HTMLFormElement>) {
     const { phase } = this.state;
-    const prevPage = this.page;
 
     if (phase === 'mail') {
       ev.preventDefault();
-      const nextPage = { pathname: '/sign', pageId: uuid() };
-      historyController.push(prevPage, nextPage, this.state);
       this.setState({ phase: 'password' });
     } else if (phase === 'password') {
       // jump with form
@@ -265,35 +369,25 @@ class Sign extends React.PureComponent<SignProps, SignState> {
 }
 
 interface AppProps {
-  pageId: string;
+  locId: string;
 }
 
 export class AppRootComponent extends React.Component<AppProps, AppState> {
   constructor(props: AppProps) {
     super(props);
 
-    const { pageId } = this.props;
+    const { locId } = this.props;
 
-    this.state = initAppState(pageId);
-  }
-
-  // static getDerivedStateFromProps(props: SignProps, prevState: SignState) {
-  // }
-
-  componentDidMount() {
-    const { loading } = this.state;
-
-    if (loading) {
-    }
+    this.state = initGlobalState(locId);
   }
 
   render() {
-    const { pageId } = this.props;
+    const { locId } = this.props;
     const { accessUser, area, loading } = this.state;
 
     if (area === 'sign') {
       return (
-        <Sign pageId={pageId} />
+        <Sign locId={locId} />
       );
     }
 
@@ -322,25 +416,29 @@ const main = () => {
   const appElement = document.getElementById('app');
   const history = H.createBrowserHistory();
 
-  const render = (location: H.Location) => {
-    console.log(`render ${location.pathname} (${(location.state as LocationState)})`);
+  const render = (loc: Loc) => {
+    const { pathname, state } = loc;
+    if (!state) throw new Error();
+    const { locId } = state;
+
+    console.log(`render ${pathname} (${locId})`);
     ReactDOM.render(
-      <AppRootComponent pageId={location.state as LocationState} />,
+      <AppRootComponent locId={locId} />,
       appElement,
-      () => {
-        console.log('render completed');
-      },
+      () => console.log('render completed'),
     );
   };
 
   history.listen(location => {
-    render(location);
+    console.log(`history listen`);
+    render(location as Loc);
   });
 
   {
-    const pageId = (history.location.state as LocationState) || uuid();
-    const initPage = { pathname: history.location.pathname, pageId };
-    historyController.connect(initPage, history);
+    const locId = uuid();
+    historyController.connect(locId, initFullState(locId), history, () => {
+      console.log(`did update`);
+    });
 
     render(history.location);
   }

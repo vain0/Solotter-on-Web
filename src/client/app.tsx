@@ -185,12 +185,12 @@ class HistoryController {
   }> = new Map();
 
   connect(
-    firstLocId: string,
     firstState: FullState,
     history: H.History,
     didSwitch: (loc: Loc) => void,
   ): Loc {
     // Generate initial location as sentinel.
+    const firstLocId = firstState.locId;
     let firstLoc: Loc;
     {
       const firstLocState = { locId: firstLocId, state: firstState };
@@ -318,7 +318,7 @@ class HistoryController {
     prevLocId: LocId,
     area: A,
     state: S,
-  ): { prevLocId: LocId, nextLoc: Loc, action: 'PUSH' | 'REPLACE' } {
+  ): { prevLocId: LocId, nextLoc: Loc, action: 'PASS' | 'PUSH' | 'REPLACE' } {
     console.log(`history didUpdate ${prevLocId} ${area}`, state);
 
     // Get things.
@@ -330,6 +330,9 @@ class HistoryController {
     if (!prevFullState) throw new Error(`loc state full state is not saved ${prevLocId}`);
 
     // Apply local state changes to global.
+    if (prevFullState[area] === state) {
+      return { prevLocId, nextLoc: prevLoc, action: 'PASS' };
+    }
     const midFullState: FullState = { ...prevFullState, [area]: state };
     const midPathname = reverseRoute(midFullState);
 
@@ -359,17 +362,15 @@ class HistoryController {
     prevLocId: LocId,
     area: A,
     state: S,
-  ): S {
+  ) {
     const { nextLoc, action } = this.nextUpdate(prevLocId, area, state);
     if (action === 'REPLACE') {
       this.replaceLoc(prevLocId, nextLoc);
     } else if (action === 'PUSH') {
       this.switchLoc(prevLocId, nextLoc, { first: false });
-    } else {
+    } else if (action !== 'PASS') {
       return exhaust(action);
     }
-
-    return state;
   }
 }
 
@@ -384,18 +385,20 @@ class Sign extends React.PureComponent<SignProps, SignState> {
   }
 
   componentDidUpdate(prevProps: SignProps, prevState: SignState) {
-    if (this.props === prevProps && this.state === prevState) return;
-
     console.log('sign didUpdate', { prevProps, props: this.props });
-
     const { locId } = this.props;
-    this.setState(state => historyController.getState(locId, 'sign', state));
+
+    if (this.props !== prevProps) {
+      this.setState(state => historyController.getState(locId, 'sign', state));
+    }
+
+    if (this.state !== prevState) {
+      historyController.didUpdate(locId, 'sign', this.state);
+    }
   }
 
   update(patch: Patch<SignState>) {
-    this.setState(state => merge(state, patch), () => {
-      historyController.didUpdate(this.props.locId, 'sign', this.state);
-    });
+    this.setState(state => merge(state, patch));
   }
 
   private onMailChange(ev: React.ChangeEvent<HTMLInputElement>) {
@@ -488,11 +491,16 @@ export class AppRootComponent extends React.Component<AppProps, GlobalState> {
     this.state = historyController.getState(locId, 'edit', initGlobalState(locId));
   }
 
-  componentDidUpdate(prevProps: AppProps) {
-    if (this.props === prevProps) return;
-
+  componentDidUpdate(prevProps: AppProps, prevState: GlobalState) {
     const { locId } = this.props;
-    this.setState(state => historyController.getState(locId, 'edit', state));
+
+    if (this.props !== prevProps) {
+      this.setState(state => historyController.getState(locId, 'edit', state));
+    }
+
+    if (this.state !== prevState) {
+      historyController.didUpdate(locId, 'edit', this.state);
+    }
   }
 
   render() {
@@ -537,8 +545,8 @@ const main = () => {
 
     console.log(`render ${pathname} (${locId})`);
     ReactDOM.render(
-      <Sign locId={locId} />,
-      // <AppRootComponent locId={locId} />,
+      // <Sign locId={locId} />,
+      <AppRootComponent locId={locId} />,
       appElement,
       () => console.log('render completed'),
     );
@@ -546,10 +554,8 @@ const main = () => {
 
   // Render initial page.
   {
-    const firstLocId = uuid();
     const secondLoc = historyController.connect(
-      firstLocId,
-      initFullState(firstLocId),
+      initFullState(uuid()),
       history,
       render,
     );

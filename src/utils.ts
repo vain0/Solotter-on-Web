@@ -1,5 +1,8 @@
 import { TestSuite } from './server/testing';
 
+export const delay = (timeout: number) =>
+  new Promise<void>(resolve => setTimeout(resolve, timeout));
+
 // プロパティを再帰的に optional にする。
 export type Patch<T> = {
   [K in keyof T]?: Patch<T[K]>

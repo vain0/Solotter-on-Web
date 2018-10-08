@@ -3,7 +3,7 @@ import * as ReactDOM from 'react-dom';
 import * as H from 'history';
 import uuid from 'uuid/v4';
 import UniversalRouter from 'universal-router';
-import { merge, Patch } from '../utils';
+import { merge, Patch, delay } from '../utils';
 
 // design conventions:
 
@@ -48,12 +48,6 @@ import { merge, Patch } from '../utils';
 // model:
 //    area: which we display you to /sign or other.
 
-interface RouteContext {
-}
-
-type RouteResult =
-  | { redirect: string };
-
 // App models.
 
 type LocId = string;
@@ -87,24 +81,26 @@ interface GlobalState {
   locId: LocId;
   area: AppArea;
   loading: boolean;
-  accessUser?: AccessUser;
 }
 
 interface LocalStates {
   sign: SignState;
   edit: {};
+  auth: {
+    isLoading: boolean;
+    accessToken?: string;
+    displayName?: string;
+  };
 }
 
 type AppArea = keyof LocalStates;
 
-type AppState = GlobalState;
 type FullState = GlobalState & LocalStates;
 
 const initGlobalState = (locId: string): GlobalState => ({
   locId,
   area: 'sign',
   loading: true,
-  accessUser: undefined,
 });
 
 const initFullState = (locId: LocId): FullState =>
@@ -112,6 +108,7 @@ const initFullState = (locId: LocId): FullState =>
     ...initGlobalState(locId),
     sign: initSignState,
     edit: {},
+    auth: { isLoading: true },
   });
 
 const exhaust = (x: never): never => x;
@@ -149,7 +146,12 @@ const resolveRoute = (pathname: string, state: FullState): FullState => {
   }
 
   // Require auth.
-  if (!state.accessUser) {
+  const accessToken: string | null | undefined = (
+    state.auth.accessToken
+    || JSON.parse(window.sessionStorage.getItem('access_token') || 'null')
+  );
+
+  if (!accessToken) {
     return { ...state, area: 'sign', sign: resolveRouteSign(pathname, state.sign) };
   }
 
@@ -162,7 +164,7 @@ const resolveRoute = (pathname: string, state: FullState): FullState => {
 
 const reverseRoute = (state: FullState) => {
   const area = state.area;
-  if (area === 'sign' || !state.accessUser) {
+  if (area === 'sign') {
     return reverseRouteSign(state.sign);
   } else {
     return '/';
@@ -345,7 +347,7 @@ class HistoryController {
     } else {
       // Use PUSH if changed. LocId is refreshed.
       const nextLocId = uuid();
-      const nextFullState = { ...midFullState, locId: nextLocId };
+      const nextFullState = resolveRoute(midPathname, { ...midFullState, locId: nextLocId });
       const nextPathname = reverseRoute(nextFullState);
 
       const nextLoc = merge(prevLoc, {
@@ -400,6 +402,7 @@ class Sign extends React.PureComponent<SignProps> {
       ev.preventDefault();
       this.update({ phase: 'password' });
     } else if (phase === 'password') {
+      window.sessionStorage.setItem('access_token', '1');
       // jump with form
     } else {
       return exhaust(phase);
@@ -463,7 +466,7 @@ class Sign extends React.PureComponent<SignProps> {
 
 export class AppRootComponent extends React.Component<FullState> {
   render() {
-    const { locId, accessUser, area, loading, sign } = this.props;
+    const { locId, area, auth, sign } = this.props;
 
     if (area === 'sign') {
       return (
@@ -471,22 +474,16 @@ export class AppRootComponent extends React.Component<FullState> {
       );
     }
 
-    if (loading) {
-      return (
-        <article
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}>
-          <div>Loading...</div>
-        </article>
-      );
-    }
-
     return (
       <article>
-        <pre>{JSON.stringify(accessUser)}</pre>
+        <header>{
+          auth.isLoading ? (
+            <div>Loading...</div>
+          ) : (
+              <pre>Hello, {auth.displayName}!</pre>
+            )
+        }</header>
+        <main>(Awesome contents here.)</main>
       </article>
     );
   }
@@ -516,7 +513,26 @@ const main = () => {
     const secondLoc = historyController.connect(
       initFullState(uuid()),
       history,
-      render,
+      (loc: Loc) => {
+        const state = loc.state && loc.state.state;
+        if (state) {
+          if (!state.auth.isLoading && !state.auth.displayName) {
+            historyController.didUpdate(state.locId, 'auth', {
+              isLoading: true,
+            });
+            (async () => {
+              await delay(1000);
+              historyController.didUpdate(state.locId, 'auth', {
+                isLoading: false,
+                accessToken: '1',
+                displayName: 'John Doe',
+              });
+            })();
+          }
+        }
+
+        render(loc);
+      },
     );
 
     render(secondLoc);

@@ -80,7 +80,6 @@ const initSignState: SignState =
 interface GlobalState {
   locId: LocId;
   area: AppArea;
-  loading: boolean;
 }
 
 interface LocalStates {
@@ -99,8 +98,7 @@ type FullState = GlobalState & LocalStates;
 
 const initGlobalState = (locId: string): GlobalState => ({
   locId,
-  area: 'sign',
-  loading: true,
+  area: 'edit',
 });
 
 const initFullState = (locId: LocId): FullState =>
@@ -140,7 +138,7 @@ const reverseRouteSign = (state: SignState): Pathname => {
   }
 };
 
-const resolveRoute = (pathname: string, state: FullState): FullState => {
+const resolveRoute = async (pathname: string, state: FullState): Promise<FullState> => {
   if (pathname.startsWith('/sign')) {
     return { ...state, area: 'sign', sign: resolveRouteSign(pathname, state.sign) };
   }
@@ -155,8 +153,10 @@ const resolveRoute = (pathname: string, state: FullState): FullState => {
     return { ...state, area: 'sign', sign: resolveRouteSign(pathname, state.sign) };
   }
 
+  const auth = state.auth.accessToken ? state.auth : await fetchAccessUser();
+
   if (pathname === '/') {
-    return { ...state, area: 'edit' };
+    return { ...state, area: 'edit', auth };
   }
 
   throw new Error('404');
@@ -188,11 +188,11 @@ class HistoryController {
     didSwitch: (loc: Loc) => void;
   }> = new Map();
 
-  connect(
+  async connect(
     firstState: FullState,
     history: H.History,
     didSwitch: (loc: Loc) => void,
-  ): Loc {
+  ): Promise<Loc> {
     // Generate initial location as sentinel.
     const firstLocId = firstState.locId;
     let firstLoc: Loc;
@@ -202,14 +202,16 @@ class HistoryController {
 
       console.log(`history connect ${firstLoc.pathname} ${firstLocId}`, firstLoc);
       this.locs.set(firstLocId, { loc: firstLoc, history, didSwitch });
+      didSwitch(firstLoc);
     }
 
     // Switches to actual first location. We might not need to push.
     let secondLoc: Loc;
     {
-      const midFullState = resolveRoute(firstLoc.pathname, firstState);
+      const midFullState = await resolveRoute(firstLoc.pathname, firstState);
       secondLoc = this.recall(firstLoc, midFullState, history);
       this.switchLoc(firstLocId, secondLoc, { first: true });
+      didSwitch(secondLoc);
     }
 
     history.listen((location, action) => {
@@ -318,11 +320,11 @@ class HistoryController {
   /**
    * Calculates next update caused by new state.
    */
-  private nextUpdate<A extends keyof LocalStates, S extends LocalStates[A]>(
+  private async nextUpdate<A extends keyof LocalStates, S extends LocalStates[A]>(
     prevLocId: LocId,
     area: A,
     state: S,
-  ): { prevLocId: LocId, nextLoc: Loc, action: 'PASS' | 'PUSH' | 'REPLACE' } {
+  ): Promise<{ prevLocId: LocId, nextLoc: Loc, action: 'PASS' | 'PUSH' | 'REPLACE' }> {
     console.log(`history didUpdate ${prevLocId} ${area}`, state);
 
     // Get things.
@@ -347,7 +349,7 @@ class HistoryController {
     } else {
       // Use PUSH if changed. LocId is refreshed.
       const nextLocId = uuid();
-      const nextFullState = resolveRoute(midPathname, { ...midFullState, locId: nextLocId });
+      const nextFullState = await resolveRoute(midPathname, { ...midFullState, locId: nextLocId });
       const nextPathname = reverseRoute(nextFullState);
 
       const nextLoc = merge(prevLoc, {
@@ -367,14 +369,24 @@ class HistoryController {
     area: A,
     state: S,
   ) {
-    const { nextLoc, action } = this.nextUpdate(prevLocId, area, state);
-    if (action === 'REPLACE') {
-      this.replaceLoc(prevLocId, nextLoc);
-    } else if (action === 'PUSH') {
-      this.switchLoc(prevLocId, nextLoc, { first: false });
-    } else if (action !== 'PASS') {
-      return exhaust(action);
+    // Update immediately to keep virtual DOM consistent.
+    {
+      const locObj = this.locs.get(prevLocId);
+      if (locObj) {
+        const { loc: prevLoc, didSwitch } = locObj;
+        didSwitch(merge(prevLoc, { state: { state: { [area]: state } } }));
+      }
     }
+
+    this.nextUpdate(prevLocId, area, state).then(({ nextLoc, action }) => {
+      if (action === 'REPLACE') {
+        this.replaceLoc(prevLocId, nextLoc);
+      } else if (action === 'PUSH') {
+        this.switchLoc(prevLocId, nextLoc, { first: false });
+      } else if (action !== 'PASS') {
+        return exhaust(action);
+      }
+    }, console.error);
   }
 }
 
@@ -489,7 +501,16 @@ export class AppRootComponent extends React.Component<FullState> {
   }
 }
 
-const main = () => {
+const fetchAccessUser = async () => {
+  await delay(1000);
+  return {
+    isLoading: false,
+    accessToken: '1',
+    displayName: 'John Doe',
+  };
+};
+
+const main = async () => {
   const appElement = document.getElementById('app');
   const history = H.createBrowserHistory();
 
@@ -509,34 +530,13 @@ const main = () => {
   };
 
   // Render initial page.
-  {
-    const secondLoc = historyController.connect(
-      initFullState(uuid()),
-      history,
-      (loc: Loc) => {
-        const state = loc.state && loc.state.state;
-        if (state) {
-          if (!state.auth.isLoading && !state.auth.displayName) {
-            historyController.didUpdate(state.locId, 'auth', {
-              isLoading: true,
-            });
-            (async () => {
-              await delay(1000);
-              historyController.didUpdate(state.locId, 'auth', {
-                isLoading: false,
-                accessToken: '1',
-                displayName: 'John Doe',
-              });
-            })();
-          }
-        }
-
-        render(loc);
-      },
-    );
-
-    render(secondLoc);
-  }
+  await historyController.connect(
+    initFullState(uuid()),
+    history,
+    (loc: Loc) => {
+      render(loc);
+    },
+  );
 };
 
-main();
+main().catch(console.error);

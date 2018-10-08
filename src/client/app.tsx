@@ -397,16 +397,12 @@ class Sign extends React.PureComponent<SignProps, SignState> {
     }
   }
 
-  update(patch: Patch<SignState>) {
-    this.setState(state => merge(state, patch));
-  }
-
   private onMailChange(ev: React.ChangeEvent<HTMLInputElement>) {
-    this.update({ mail: ev.target.value });
+    this.setState({ mail: ev.target.value });
   }
 
   private onPasswordChange(ev: React.ChangeEvent<HTMLInputElement>) {
-    this.update({ password: ev.target.value });
+    this.setState({ password: ev.target.value });
   }
 
   private onSubmit(ev: React.FormEvent<HTMLFormElement>) {
@@ -415,7 +411,7 @@ class Sign extends React.PureComponent<SignProps, SignState> {
     const { phase } = this.state;
     if (phase === 'mail') {
       ev.preventDefault();
-      this.update({ phase: 'password' });
+      this.setState({ phase: 'password' });
     } else if (phase === 'password') {
       // jump with form
     } else {

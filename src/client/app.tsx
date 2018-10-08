@@ -172,58 +172,88 @@ type Pathname = string;
 type LocState = {
   locId: LocId,
   state?: FullState,
-  history: H.History;
-  didUpdate: (state: FullState) => void;
 };
 
 type Loc = H.Location<LocState | undefined>;
 
 class HistoryController {
-  locs: Map<LocId, Loc> = new Map();
+  locs: Map<LocId, {
+    loc: Loc,
+    history: H.History;
+    didUpdate: (state: FullState) => void;
+  }> = new Map();
 
   connect(
-    locId: string,
-    fullState: FullState,
+    prevLocId: string,
+    prevState: FullState,
     history: H.History,
     didUpdate: () => void,
-  ): LocId {
-    const loc = history.location as Loc;
-    const { pathname } = loc;
+  ): Loc {
+    // Generate initial location.
+    let prevLoc: Loc;
+    {
+      const loc = history.location as Loc;
+      const locState = { locId: prevLocId, state: prevState };
+      prevLoc = { ...loc, state: locState };
 
-    const locState = { locId, state: fullState, history, didUpdate };
-    const initLoc = { ...loc, state: locState };
+      console.log(`history connect ${prevLoc.pathname} ${prevLocId}`, prevLoc);
+      this.locs.set(prevLocId, { loc: prevLoc, history, didUpdate });
+    }
 
-    console.log(`history connect: ${pathname} ${locId}`, initLoc);
-    this.locs.set(locId, initLoc);
+    // Calculate actual first location.
+    {
+      const midFullState = prevState;
 
-    const nextLocId = this.push(locId, fullState);
-    return nextLocId;
+      // Merge history.location.
+      const curLoc = history.location as Loc;
+      const nextLocId = curLoc.state && curLoc.state.locId || uuid();
+      const storedState = curLoc.state && curLoc.state.state;
+      const nextFullState = { ...midFullState, ...storedState, locId: nextLocId };
+      const nextPathname = reverseRoute(nextFullState);
+
+      const nextLoc = merge(prevLoc, {
+        pathname: nextPathname,
+        state: { locId: nextLocId, state: nextFullState },
+      });
+
+      this.push(prevLocId, nextLoc, { first: true });
+      return nextLoc;
+    }
   }
 
-  private push(locId: LocId, midFullState: FullState): LocId {
-    const loc = this.locs.get(locId)!;
-    const { history, didUpdate } = loc.state!;
+  private push(
+    prevLocId: LocId,
+    nextLoc: Loc,
+    { first }: { first: boolean },
+  ) {
+    if (!nextLoc.state || !nextLoc.state.state || nextLoc.state.locId !== nextLoc.state.state.locId) {
+      throw new Error(`Invalid next loc ${JSON.stringify(nextLoc)}`);
+    }
 
-    const nextLoc = history.location as Loc;
-    const nextLocId = nextLoc.state && nextLoc.state.locId || uuid();
-    const storedState = nextLoc.state && nextLoc.state.state;
-    const nextFullState = { ...midFullState, ...storedState, locId: nextLocId };
+    const locObj = this.locs.get(prevLocId)!;
+    if (!locObj) throw new Error(`Invalid locId ${prevLocId}`);
+    const { loc: prevLoc, history, didUpdate } = locObj;
 
-    console.log(`history push ${loc.pathname} -> ${nextLoc.pathname} (${nextLocId})`, nextFullState);
-    this.locs.set(locId, merge(loc, { state: { state: nextFullState } }));
-    history.push(nextLoc.pathname, nextFullState);
-    didUpdate(nextFullState);
+    const action = first ? 'REPLACE' : 'PUSH';
+    const historyUpdate = (p: string, s: LocState) =>
+      first ? history.replace(p, s) : history.push(p, s);
 
-    return nextLocId;
+    const { locId: nextLocId, state: nextFullState } = nextLoc.state;
+
+    console.log(`history ${action} ${prevLoc.pathname} -> ${nextLoc.pathname} (${nextLocId})`, nextLoc.state.state);
+    this.locs.set(nextLocId, { loc: nextLoc, history, didUpdate });
+    historyUpdate(nextLoc.pathname, nextLoc.state!);
+    didUpdate(nextFullState!);
   }
 
   private replace(locId: LocId, nextFullState: FullState): void {
-    const loc = this.locs.get(locId)!;
-    const { history } = loc.state!;
+    const { loc, history, didUpdate } = this.locs.get(locId)!;
+
+    const nextLoc = merge(loc, { state: { state: nextFullState } });
 
     console.log(`history replace ${loc.pathname}`, nextFullState);
-    this.locs.set(locId, merge(loc, { state: { state: nextFullState } }));
-    history.replace(loc.pathname, nextFullState);
+    this.locs.set(locId, { loc: nextLoc, history, didUpdate });
+    history.replace(loc.pathname, nextLoc.state as LocState);
   }
 
   /**
@@ -235,8 +265,9 @@ class HistoryController {
   getState<A extends keyof LocalStates, S extends LocalStates[A]>(locId: LocId, area: A, state: S): S {
     console.log(`history getState ${locId} ${area}`, state);
 
-    const loc = this.locs.get(locId);
-    const storedState = loc && loc.state && loc.state.state && loc.state.state[area] as S;
+    const locObj = this.locs.get(locId);
+    const locState = locObj && locObj.loc.state;
+    const storedState = locState && locState.state && locState.state[area] as S;
     if (!storedState) return state;
 
     return merge(state, storedState as any);
@@ -247,29 +278,58 @@ class HistoryController {
    * See `Sign.componentDidUpdate` for usage.
    */
   didUpdate<A extends keyof LocalStates, S extends LocalStates[A]>(
-    locId: LocId,
+    prevLocId: LocId,
     area: A,
     state: S,
   ): S {
-    console.log(`history didUpdate ${locId} ${area}`, state);
+    console.log(`history didUpdate ${prevLocId} ${area}`, state);
 
-    const loc = this.locs.get(locId);
-    if (!loc) throw new Error(`Unknown locId ${locId}`);
-    if (!loc.state) throw new Error(`loc state is not saved ${locId}`);
-    const prevFullState = loc.state.state;
-    if (!prevFullState) throw new Error(`loc state full state is not saved ${locId}`);
+    const locObj = this.locs.get(prevLocId);
+    if (!locObj) throw new Error(`Unknown locId ${prevLocId}`);
+    const { loc: prevLoc } = locObj;
+    if (!prevLoc.state) throw new Error(`loc state is not saved ${prevLocId}`);
+
+    const { state: prevFullState } = prevLoc.state;
+    if (!prevFullState) throw new Error(`loc state full state is not saved ${prevLocId}`);
 
     const midFullState: FullState = { ...prevFullState, [area]: state };
-    const prevPathname = loc.pathname;
-    const nextPathname = reverseRoute(midFullState);
+    const midPathname = reverseRoute(midFullState);
 
-    if (prevPathname === nextPathname) {
-      this.replace(locId, midFullState);
+    if (prevLoc.pathname === midPathname) {
+      this.replace(prevLocId, midFullState);
       return state;
-    } else {
-      const nextLocId = this.push(locId, midFullState);
-      return this.getState(nextLocId, area, state);
     }
+
+    {
+      // // Merge history.location.
+      // const curLoc = history.location as Loc;
+      // const nextLocId = curLoc.state && curLoc.state.state && curLoc.state.state.locId || uuid();
+      // const storedState = curLoc.state && curLoc.state.state;
+      const storedState = {};
+      const nextLocId = uuid();
+
+      const nextFullState = { ...midFullState, ...storedState, locId: nextLocId };
+      const nextPathname = reverseRoute(nextFullState);
+
+      const nextLoc = merge(prevLoc, {
+        pathname: nextPathname,
+        state: { locId: nextLocId, state: nextFullState },
+      });
+
+      this.push(prevLocId, nextLoc, { first: false });
+
+      return nextFullState[area] as S;
+    }
+  }
+
+  bridge(prevLoc: Loc, nextLoc: Loc) {
+    const prevLocId = prevLoc.state && prevLoc.state.locId;
+    const nextLocId = nextLoc.state && nextLoc.state.locId;
+    if (!prevLocId || !nextLocId || this.locs.has(nextLocId)) return;
+
+    const { history, didUpdate } = this.locs.get(prevLocId)!;
+
+    this.locs.set(nextLocId, { loc: nextLoc, history, didUpdate });
   }
 }
 
@@ -287,25 +347,35 @@ class Sign extends React.PureComponent<SignProps, SignState> {
     if (this.props === prevProps && this.state === prevState) return;
 
     console.log('sign didUpdate', { prevProps, props: this.props });
-    this.setState(state => historyController.didUpdate(this.props.locId, 'sign', state), () => {
-      console.log(`sign setState end`, this.state);
-    });
+
+    const { locId } = this.props;
+    this.setState(state => historyController.getState(locId, 'sign', state));
+    // this.setState(state => {
+    //   return historyController.didUpdate(this.props.locId, 'sign', state);
+    // }, () => {
+    //   console.log(`sign setState end`, this.state);
+    // });
+  }
+
+  update(patch: Patch<SignState>) {
+    this.setState(state => historyController.didUpdate(this.props.locId, 'sign', merge(state, patch)));
   }
 
   private onMailChange(ev: React.ChangeEvent<HTMLInputElement>) {
-    this.setState({ mail: ev.target.value });
+    this.update({ mail: ev.target.value });
   }
 
   private onPasswordChange(ev: React.ChangeEvent<HTMLInputElement>) {
-    this.setState({ password: ev.target.value });
+    this.update({ password: ev.target.value });
   }
 
   private onSubmit(ev: React.FormEvent<HTMLFormElement>) {
-    const { phase } = this.state;
+    console.log('submit', this.state);
 
+    const { phase } = this.state;
     if (phase === 'mail') {
       ev.preventDefault();
-      this.setState({ phase: 'password' });
+      this.update({ phase: 'password' });
     } else if (phase === 'password') {
       // jump with form
     } else {
@@ -372,13 +442,20 @@ interface AppProps {
   locId: string;
 }
 
-export class AppRootComponent extends React.Component<AppProps, AppState> {
+export class AppRootComponent extends React.Component<AppProps, GlobalState> {
   constructor(props: AppProps) {
     super(props);
 
     const { locId } = this.props;
 
-    this.state = initGlobalState(locId);
+    this.state = historyController.getState(locId, 'edit', initGlobalState(locId));
+  }
+
+  componentDidUpdate(prevProps: AppProps) {
+    if (this.props === prevProps) return;
+
+    const { locId } = this.props;
+    this.setState(state => historyController.getState(locId, 'edit', state));
   }
 
   render() {
@@ -418,29 +495,33 @@ const main = () => {
 
   const render = (loc: Loc) => {
     const { pathname, state } = loc;
-    if (!state) throw new Error();
+    if (!state) throw new Error(`history.location must have state ${pathname}`);
     const { locId } = state;
 
     console.log(`render ${pathname} (${locId})`);
     ReactDOM.render(
-      <AppRootComponent locId={locId} />,
+      <Sign locId={locId} />,
+      // <AppRootComponent locId={locId} />,
       appElement,
       () => console.log('render completed'),
     );
   };
 
-  history.listen(location => {
-    console.log(`history listen`);
-    render(location as Loc);
-  });
-
+  // Render initial page.
   {
-    const locId = uuid();
-    historyController.connect(locId, initFullState(locId), history, () => {
+    const initLocId = uuid();
+    const initState = initFullState(initLocId);
+    const nextLoc = historyController.connect(initLocId, initState, history, () => {
       console.log(`did update`);
     });
 
-    render(history.location);
+    render(nextLoc);
+
+    history.listen(location => {
+      console.log(`history listen`);
+      historyController.bridge(nextLoc, location as Loc);
+      render(location as Loc);
+    });
   }
 };
 

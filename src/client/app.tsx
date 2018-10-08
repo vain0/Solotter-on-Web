@@ -237,7 +237,9 @@ class HistoryController {
     this.locs.set(nextLocId, { loc: nextLoc, history, didSwitch });
   }
 
-  /** Merges current location into previous one. */
+  /**
+   * Merges current location into previous one.
+   */
   private recall(prevLoc: Loc, midFullState: FullState, history: H.History): Loc {
     const curLoc = history.location as Loc;
     const nextLocId = curLoc.state && curLoc.state.locId || uuid();
@@ -290,10 +292,13 @@ class HistoryController {
   }
 
   /**
-   * Gets next state for the area.
+   * Gets current state for the area.
    *
-   * If some state is saved in the controller, return it.
-   * Otherwise, just return given state.
+   * If some state is saved in the controller, you will get it.
+   * Otherwise, same state is returned.
+   *
+   * Use this in components' contructor/componentDidUpdate
+   * for update after hitory replace.
    */
   getState<A extends keyof LocalStates, S extends LocalStates[A]>(locId: LocId, area: A, state: S): S {
     console.log(`history getState ${locId} ${area}`, state);
@@ -306,30 +311,34 @@ class HistoryController {
     return merge(state, storedState as any);
   }
 
+  /**
+   * Calculates next update caused by new state.
+   */
   private nextUpdate<A extends keyof LocalStates, S extends LocalStates[A]>(
     prevLocId: LocId,
     area: A,
     state: S,
-  ): { prevLocId: LocId, nextLoc: Loc, state: S, action: 'PUSH' | 'REPLACE' } {
+  ): { prevLocId: LocId, nextLoc: Loc, action: 'PUSH' | 'REPLACE' } {
     console.log(`history didUpdate ${prevLocId} ${area}`, state);
 
+    // Get things.
     const locObj = this.locs.get(prevLocId);
     if (!locObj) throw new Error(`Unknown locId ${prevLocId}`);
     const { loc: prevLoc } = locObj;
     if (!prevLoc.state) throw new Error(`loc state is not saved ${prevLocId}`);
-
     const { state: prevFullState } = prevLoc.state;
     if (!prevFullState) throw new Error(`loc state full state is not saved ${prevLocId}`);
 
+    // Apply local state changes to global.
     const midFullState: FullState = { ...prevFullState, [area]: state };
     const midPathname = reverseRoute(midFullState);
 
     if (prevLoc.pathname === midPathname) {
+      // Use replace if pathname is unchanged.
       const nextLoc = merge(prevLoc, { state: { state: midFullState } });
-      return { prevLocId: prevLocId, nextLoc, state, action: 'REPLACE' };
-    }
-
-    {
+      return { prevLocId: prevLocId, nextLoc, action: 'REPLACE' };
+    } else {
+      // Use PUSH if changed. LocId is refreshed.
       const nextLocId = uuid();
       const nextFullState = { ...midFullState, locId: nextLocId };
       const nextPathname = reverseRoute(nextFullState);
@@ -339,21 +348,19 @@ class HistoryController {
         state: { locId: nextLocId, state: nextFullState },
       });
 
-      const nextLocalState = nextFullState[area] as S;
-      return { prevLocId, nextLoc, state: nextLocalState, action: 'PUSH' };
+      return { prevLocId, nextLoc, action: 'PUSH' };
     }
   }
 
   /**
    * Update state, dispatching history update.
    */
-  update<A extends keyof LocalStates, S extends LocalStates[A]>(
+  didUpdate<A extends keyof LocalStates, S extends LocalStates[A]>(
     prevLocId: LocId,
     area: A,
     state: S,
   ): S {
-    const { nextLoc, state: nextState, action } = this.nextUpdate(prevLocId, area, state);
-
+    const { nextLoc, action } = this.nextUpdate(prevLocId, area, state);
     if (action === 'REPLACE') {
       this.replaceLoc(prevLocId, nextLoc);
     } else if (action === 'PUSH') {
@@ -362,7 +369,7 @@ class HistoryController {
       return exhaust(action);
     }
 
-    return nextState;
+    return state;
   }
 }
 
@@ -386,7 +393,9 @@ class Sign extends React.PureComponent<SignProps, SignState> {
   }
 
   update(patch: Patch<SignState>) {
-    this.setState(state => historyController.update(this.props.locId, 'sign', merge(state, patch)));
+    this.setState(state => merge(state, patch), () => {
+      historyController.didUpdate(this.props.locId, 'sign', this.state);
+    });
   }
 
   private onMailChange(ev: React.ChangeEvent<HTMLInputElement>) {

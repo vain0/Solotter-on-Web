@@ -67,6 +67,7 @@ interface AccessUser {
 
 interface SignProps {
   locId: LocId;
+  state: SignState;
 }
 
 interface SignState {
@@ -75,11 +76,12 @@ interface SignState {
   password: string;
 }
 
-const initSignState: SignState = {
-  phase: 'mail',
-  mail: '',
-  password: '',
-};
+const initSignState: SignState =
+  ({
+    phase: 'mail',
+    mail: '',
+    password: '',
+  });
 
 interface GlobalState {
   locId: LocId;
@@ -212,9 +214,9 @@ class HistoryController {
       console.log(`history listen`);
       this.bridge(secondLoc, location as Loc);
 
-      if (action === 'POP' || action === 'PUSH') {
+      if (action === 'POP' || action === 'PUSH' || action == 'REPLACE') {
         didSwitch(location);
-      } else if (action !== 'REPLACE') {
+      } else {
         return exhaust(action);
       }
     });
@@ -377,41 +379,26 @@ class HistoryController {
 // Holy global var!
 const historyController = new HistoryController();
 
-class Sign extends React.PureComponent<SignProps, SignState> {
-  constructor(props: SignProps) {
-    super(props);
-
-    this.state = historyController.getState(props.locId, 'sign', initSignState);
-  }
-
-  componentDidUpdate(prevProps: SignProps, prevState: SignState) {
-    console.log('sign didUpdate', { prevProps, props: this.props });
-    const { locId } = this.props;
-
-    if (this.props !== prevProps) {
-      this.setState(state => historyController.getState(locId, 'sign', state));
-    }
-
-    if (this.state !== prevState) {
-      historyController.didUpdate(locId, 'sign', this.state);
-    }
+class Sign extends React.PureComponent<SignProps> {
+  private update(patch: Patch<SignState>) {
+    historyController.didUpdate(this.props.locId, 'sign', merge(this.props.state, patch));
   }
 
   private onMailChange(ev: React.ChangeEvent<HTMLInputElement>) {
-    this.setState({ mail: ev.target.value });
+    this.update({ mail: ev.target.value });
   }
 
   private onPasswordChange(ev: React.ChangeEvent<HTMLInputElement>) {
-    this.setState({ password: ev.target.value });
+    this.update({ password: ev.target.value });
   }
 
   private onSubmit(ev: React.FormEvent<HTMLFormElement>) {
-    console.log('submit', this.state);
+    console.log('submit', this.props);
 
-    const { phase } = this.state;
+    const { phase } = this.props.state;
     if (phase === 'mail') {
       ev.preventDefault();
-      this.setState({ phase: 'password' });
+      this.update({ phase: 'password' });
     } else if (phase === 'password') {
       // jump with form
     } else {
@@ -420,7 +407,7 @@ class Sign extends React.PureComponent<SignProps, SignState> {
   }
 
   private renderContent() {
-    const { phase, mail, password } = this.state;
+    const { phase, mail, password } = this.props.state;
     if (phase === 'mail') {
       return (
         <section>
@@ -474,38 +461,13 @@ class Sign extends React.PureComponent<SignProps, SignState> {
   }
 }
 
-interface AppProps {
-  locId: string;
-}
-
-export class AppRootComponent extends React.Component<AppProps, GlobalState> {
-  constructor(props: AppProps) {
-    super(props);
-
-    const { locId } = this.props;
-
-    this.state = historyController.getState(locId, 'edit', initGlobalState(locId));
-  }
-
-  componentDidUpdate(prevProps: AppProps, prevState: GlobalState) {
-    const { locId } = this.props;
-
-    if (this.props !== prevProps) {
-      this.setState(state => historyController.getState(locId, 'edit', state));
-    }
-
-    if (this.state !== prevState) {
-      historyController.didUpdate(locId, 'edit', this.state);
-    }
-  }
-
+export class AppRootComponent extends React.Component<FullState> {
   render() {
-    const { locId } = this.props;
-    const { accessUser, area, loading } = this.state;
+    const { locId, accessUser, area, loading, sign } = this.props;
 
     if (area === 'sign') {
       return (
-        <Sign locId={locId} />
+        <Sign locId={locId} state={sign} />
       );
     }
 
@@ -535,14 +497,15 @@ const main = () => {
   const history = H.createBrowserHistory();
 
   const render = (loc: Loc) => {
-    const { pathname, state } = loc;
-    if (!state) throw new Error(`history.location must have state ${pathname}`);
-    const { locId } = state;
+    const { pathname, state: locState } = loc;
+    if (!locState || !locState.state) {
+      throw new Error(`history.location must have state ${pathname}`);
+    }
+    const { locId, state: fullState } = locState;
 
     console.log(`render ${pathname} (${locId})`);
     ReactDOM.render(
-      // <Sign locId={locId} />,
-      <AppRootComponent locId={locId} />,
+      <AppRootComponent {...fullState} />,
       appElement,
       () => console.log('render completed'),
     );

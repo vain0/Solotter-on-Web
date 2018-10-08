@@ -180,48 +180,79 @@ class HistoryController {
   locs: Map<LocId, {
     loc: Loc,
     history: H.History;
-    didUpdate: (state: FullState) => void;
+    /** Called whenever page switched. */
+    didSwitch: (loc: Loc) => void;
   }> = new Map();
 
   connect(
-    prevLocId: string,
-    prevState: FullState,
+    firstLocId: string,
+    firstState: FullState,
     history: H.History,
-    didUpdate: () => void,
+    didSwitch: (loc: Loc) => void,
   ): Loc {
-    // Generate initial location.
-    let prevLoc: Loc;
+    // Generate initial location as sentinel.
+    let firstLoc: Loc;
     {
-      const loc = history.location as Loc;
-      const locState = { locId: prevLocId, state: prevState };
-      prevLoc = { ...loc, state: locState };
+      const firstLocState = { locId: firstLocId, state: firstState };
+      firstLoc = { ...history.location, state: firstLocState };
 
-      console.log(`history connect ${prevLoc.pathname} ${prevLocId}`, prevLoc);
-      this.locs.set(prevLocId, { loc: prevLoc, history, didUpdate });
+      console.log(`history connect ${firstLoc.pathname} ${firstLocId}`, firstLoc);
+      this.locs.set(firstLocId, { loc: firstLoc, history, didSwitch });
     }
 
-    // Calculate actual first location.
+    // Switches to actual first location. We might not need to push.
+    let secondLoc: Loc;
     {
-      const midFullState = prevState;
-
-      // Merge history.location.
-      const curLoc = history.location as Loc;
-      const nextLocId = curLoc.state && curLoc.state.locId || uuid();
-      const storedState = curLoc.state && curLoc.state.state;
-      const nextFullState = { ...midFullState, ...storedState, locId: nextLocId };
-      const nextPathname = reverseRoute(nextFullState);
-
-      const nextLoc = merge(prevLoc, {
-        pathname: nextPathname,
-        state: { locId: nextLocId, state: nextFullState },
-      });
-
-      this.push(prevLocId, nextLoc, { first: true });
-      return nextLoc;
+      const midFullState = resolveRoute(firstLoc.pathname, firstState);
+      secondLoc = this.recall(firstLoc, midFullState, history);
+      this.switchLoc(firstLocId, secondLoc, { first: true });
     }
+
+    history.listen((location, action) => {
+      console.log(`history listen`);
+      this.bridge(secondLoc, location as Loc);
+
+      if (action === 'POP' || action === 'PUSH') {
+        didSwitch(location);
+      } else if (action !== 'REPLACE') {
+        return exhaust(action);
+      }
+    });
+
+    return secondLoc;
   }
 
-  private push(
+  /**
+   * Relays dependencies to new location.
+   *
+   * This is necessary in case where historyController is cleared by visiting external page.
+   */
+  private bridge(prevLoc: Loc, nextLoc: Loc) {
+    const prevLocId = prevLoc.state && prevLoc.state.locId;
+    const nextLocId = nextLoc.state && nextLoc.state.locId;
+    if (!prevLocId || !nextLocId || this.locs.has(nextLocId)) return;
+
+    const { history, didSwitch } = this.locs.get(prevLocId)!;
+
+    this.locs.set(nextLocId, { loc: nextLoc, history, didSwitch });
+  }
+
+  /** Merges current location into previous one. */
+  private recall(prevLoc: Loc, midFullState: FullState, history: H.History): Loc {
+    const curLoc = history.location as Loc;
+    const nextLocId = curLoc.state && curLoc.state.locId || uuid();
+    const storedState = curLoc.state && curLoc.state.state;
+    const nextFullState = { ...midFullState, ...storedState, locId: nextLocId };
+    const nextPathname = reverseRoute(nextFullState);
+
+    return merge(prevLoc, {
+      pathname: nextPathname,
+      state: { locId: nextLocId, state: nextFullState },
+    });
+  }
+
+  /** Switches to new location. Pushes a new history unless first. */
+  private switchLoc(
     prevLocId: LocId,
     nextLoc: Loc,
     { first }: { first: boolean },
@@ -229,31 +260,33 @@ class HistoryController {
     if (!nextLoc.state || !nextLoc.state.state || nextLoc.state.locId !== nextLoc.state.state.locId) {
       throw new Error(`Invalid next loc ${JSON.stringify(nextLoc)}`);
     }
-
     const locObj = this.locs.get(prevLocId)!;
     if (!locObj) throw new Error(`Invalid locId ${prevLocId}`);
-    const { loc: prevLoc, history, didUpdate } = locObj;
+    const { loc: prevLoc, history, didSwitch } = locObj;
+    const { locId: nextLocId } = nextLoc.state;
 
     const action = first ? 'REPLACE' : 'PUSH';
-    const historyUpdate = (p: string, s: LocState) =>
-      first ? history.replace(p, s) : history.push(p, s);
-
-    const { locId: nextLocId, state: nextFullState } = nextLoc.state;
+    const historyUpdate = (pathname: string, loc: Loc) => {
+      if (first) return history.replace(pathname, loc.state);
+      history.push(pathname, loc.state);
+    };
 
     console.log(`history ${action} ${prevLoc.pathname} -> ${nextLoc.pathname} (${nextLocId})`, nextLoc.state.state);
-    this.locs.set(nextLocId, { loc: nextLoc, history, didUpdate });
-    historyUpdate(nextLoc.pathname, nextLoc.state!);
-    didUpdate(nextFullState!);
+    this.locs.set(nextLocId, { loc: nextLoc, history, didSwitch });
+    historyUpdate(nextLoc.pathname, nextLoc);
   }
 
-  private replace(locId: LocId, nextFullState: FullState): void {
-    const { loc, history, didUpdate } = this.locs.get(locId)!;
+  /** Replaces current location. */
+  private replaceLoc(prevLocId: LocId, nextLoc: Loc): void {
+    const { history, didSwitch } = this.locs.get(prevLocId)!;
 
-    const nextLoc = merge(loc, { state: { state: nextFullState } });
+    if (!nextLoc.state || prevLocId !== nextLoc.state.locId) {
+      throw new Error(`history replace must not change locId`);
+    }
 
-    console.log(`history replace ${loc.pathname}`, nextFullState);
-    this.locs.set(locId, { loc: nextLoc, history, didUpdate });
-    history.replace(loc.pathname, nextLoc.state as LocState);
+    console.log(`history replace ${nextLoc.pathname}`, nextLoc);
+    this.locs.set(prevLocId, { loc: nextLoc, history, didSwitch });
+    history.replace(nextLoc.pathname, nextLoc.state as LocState);
   }
 
   /**
@@ -273,15 +306,11 @@ class HistoryController {
     return merge(state, storedState as any);
   }
 
-  /**
-   * Components should call this after state changed.
-   * See `Sign.componentDidUpdate` for usage.
-   */
-  didUpdate<A extends keyof LocalStates, S extends LocalStates[A]>(
+  private nextUpdate<A extends keyof LocalStates, S extends LocalStates[A]>(
     prevLocId: LocId,
     area: A,
     state: S,
-  ): S {
+  ): { prevLocId: LocId, nextLoc: Loc, state: S, action: 'PUSH' | 'REPLACE' } {
     console.log(`history didUpdate ${prevLocId} ${area}`, state);
 
     const locObj = this.locs.get(prevLocId);
@@ -296,19 +325,13 @@ class HistoryController {
     const midPathname = reverseRoute(midFullState);
 
     if (prevLoc.pathname === midPathname) {
-      this.replace(prevLocId, midFullState);
-      return state;
+      const nextLoc = merge(prevLoc, { state: { state: midFullState } });
+      return { prevLocId: prevLocId, nextLoc, state, action: 'REPLACE' };
     }
 
     {
-      // // Merge history.location.
-      // const curLoc = history.location as Loc;
-      // const nextLocId = curLoc.state && curLoc.state.state && curLoc.state.state.locId || uuid();
-      // const storedState = curLoc.state && curLoc.state.state;
-      const storedState = {};
       const nextLocId = uuid();
-
-      const nextFullState = { ...midFullState, ...storedState, locId: nextLocId };
+      const nextFullState = { ...midFullState, locId: nextLocId };
       const nextPathname = reverseRoute(nextFullState);
 
       const nextLoc = merge(prevLoc, {
@@ -316,20 +339,30 @@ class HistoryController {
         state: { locId: nextLocId, state: nextFullState },
       });
 
-      this.push(prevLocId, nextLoc, { first: false });
-
-      return nextFullState[area] as S;
+      const nextLocalState = nextFullState[area] as S;
+      return { prevLocId, nextLoc, state: nextLocalState, action: 'PUSH' };
     }
   }
 
-  bridge(prevLoc: Loc, nextLoc: Loc) {
-    const prevLocId = prevLoc.state && prevLoc.state.locId;
-    const nextLocId = nextLoc.state && nextLoc.state.locId;
-    if (!prevLocId || !nextLocId || this.locs.has(nextLocId)) return;
+  /**
+   * Update state, dispatching history update.
+   */
+  update<A extends keyof LocalStates, S extends LocalStates[A]>(
+    prevLocId: LocId,
+    area: A,
+    state: S,
+  ): S {
+    const { nextLoc, state: nextState, action } = this.nextUpdate(prevLocId, area, state);
 
-    const { history, didUpdate } = this.locs.get(prevLocId)!;
+    if (action === 'REPLACE') {
+      this.replaceLoc(prevLocId, nextLoc);
+    } else if (action === 'PUSH') {
+      this.switchLoc(prevLocId, nextLoc, { first: false });
+    } else {
+      return exhaust(action);
+    }
 
-    this.locs.set(nextLocId, { loc: nextLoc, history, didUpdate });
+    return nextState;
   }
 }
 
@@ -350,15 +383,10 @@ class Sign extends React.PureComponent<SignProps, SignState> {
 
     const { locId } = this.props;
     this.setState(state => historyController.getState(locId, 'sign', state));
-    // this.setState(state => {
-    //   return historyController.didUpdate(this.props.locId, 'sign', state);
-    // }, () => {
-    //   console.log(`sign setState end`, this.state);
-    // });
   }
 
   update(patch: Patch<SignState>) {
-    this.setState(state => historyController.didUpdate(this.props.locId, 'sign', merge(state, patch)));
+    this.setState(state => historyController.update(this.props.locId, 'sign', merge(state, patch)));
   }
 
   private onMailChange(ev: React.ChangeEvent<HTMLInputElement>) {
@@ -509,19 +537,15 @@ const main = () => {
 
   // Render initial page.
   {
-    const initLocId = uuid();
-    const initState = initFullState(initLocId);
-    const nextLoc = historyController.connect(initLocId, initState, history, () => {
-      console.log(`did update`);
-    });
+    const firstLocId = uuid();
+    const secondLoc = historyController.connect(
+      firstLocId,
+      initFullState(firstLocId),
+      history,
+      render,
+    );
 
-    render(nextLoc);
-
-    history.listen(location => {
-      console.log(`history listen`);
-      historyController.bridge(nextLoc, location as Loc);
-      render(location as Loc);
-    });
+    render(secondLoc);
   }
 };
 

@@ -432,7 +432,7 @@ class Sign extends React.PureComponent<SignProps, SignState> {
           <input
             id='mail-input' key='mail-input'
             type='email'
-            autoFocus
+            autoFocus autoComplete='email'
             required
             value={mail}
             onChange={ev => this.onMailChange(ev)} />
@@ -451,7 +451,7 @@ class Sign extends React.PureComponent<SignProps, SignState> {
           <input
             id='password-input' name='password' key='password-input'
             type='password'
-            autoComplete='current-password'
+            autoFocus autoComplete='current-password'
             required
             value={password}
             onChange={ev => this.onPasswordChange(ev)} />

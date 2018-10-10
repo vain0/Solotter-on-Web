@@ -9,16 +9,12 @@
     --accent-color-dark: #c67100;
     --base-color: #fafafa;
     --base-color-text: #212121;
+    --divider-color: #bdbdbd;
 }
 
 html {
     /* 1rem = 10px. */
     font-size: 62.5%;
-}
-
-body {
-    font-family: 'Noto Sans JP', sans-serif;
-    font-feature-settings: 'palt' on;
 }
 
 body,
@@ -30,56 +26,118 @@ textarea {
     line-height: 1.5;
 }
 
+button:disabled,
+input:read-only {
+    opacity: 0.75;
+}
+
+
+
 html,
 body,
-#app {
+#app,
+#app > * {
     height: 100%;
 }
 
-.tweet-form {
-    width: 600px;
+body {
+    font-size: 1.6rem;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-feature-settings: 'palt' on;
+
+    color: var(--base-color-text);
 }
 
-.tweet-form .tweet-form-textbox {
-    width: 100%;
+#app {
+    background-color: var(--base-color);
 }
 
-.user-group-edit-main textarea {
-    width: 100%;
+#app > article {
+    display: flex;
+    flex-flow: column nowrap;
 }
 
-.user-group-edit-main input[type="text"] {
-    display: block;
-    width: 300px;
+#app header {
+    background-color: var(--primary-color-dark);
 }
 
-@media (max-width: 1200px) {
-    body {
-        padding: 12px;
+#app header > h1 {
+    margin: 0;
+    padding: 16px 16px;
+
+    font-size: 2.5rem;
+    color: var(--primary-color-text);
+}
+
+#app main {
+    flex: 1 1 auto;
+    margin: 16px;
+
+    display: flex;
+    flex-flow: column nowrap;
+}
+
+@media (min-width: 649px) {
+    #app header > h1 {
+        max-width: 600px;
     }
 
-    h1, h2, h3, h4, h5, h6 {
-        margin: 12px 0;
-    }
-
-    h1 {
-        font-size: 2.5rem;
-    }
-
-    h2 {
-        font-size: 2.4rem;
-    }
-
-    h3 {
-        font-size: 2.1rem;
-    }
-
-    .tweet-form {
-        width: 100%;
+    #app main {
+        max-width: 600px;
+        align-self: center;
     }
 }
 
-code {
-    padding: 2px;
-    background-color: #f3f3f3;
+#app h2,
+#app h3 {
+    margin: 0;
+    padding: 8px 16px;
+}
+
+#app h2 {
+    font-size: 2.3rem;
+    color: var(--primary-color-dark);
+}
+
+#app h3 {
+    font-size: 2.1rem;
+    color: var(--primary-color-dark);
+}
+
+
+
+#loading-component {
+    background: var(--primary-color);
+    color: var(--primary-color-text);
+}
+
+#loading-component main {
+    align-items: center;
+    justify-content: center;
+
+    font-size: 3.0rem;
+    font-weight: 900;
+}
+
+
+
+#tweet-component .user-name {
+    margin: 8px 0;
+}
+
+#tweet-component .tweet-form {
+    display: flex;
+    flex-flow: column nowrap;
+}
+
+#tweet-component .tweet-textarea {
+    border: none;
+    background-color: var(--base-color);
+}
+
+#tweet-component .tweet-button {
+    align-self: flex-end;
+
+    margin: 16px 0;
+    padding: 4px 8px;
 }

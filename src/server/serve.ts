@@ -1,8 +1,6 @@
 import { config as dotEnvConfig } from 'dotenv';
 import express from 'express';
-import { NextFunction, Request, Response } from 'express';
 import * as path from 'path';
-import serveStatic from 'serve-static';
 import { exhaust } from '../utils';
 import { oauthServiceWith } from './infra-twitter';
 import {
@@ -17,32 +15,42 @@ const parseAuthHeader = (a: string | undefined): string | undefined => {
 };
 
 const serverRouteWith =
-  (serverRouter: ServerRouter) => (req: Request, res: Response, next: NextFunction) => {
-    const auth = parseAuthHeader(req.headers.authorization);
+  (serverRouter: ServerRouter, serveStatic: express.Handler) => {
+    const router = express.Router();
 
-    console.error({ path: req.path, query: req.query, body: req.query });
+    router.post('*', (req, res) => {
+      const auth = parseAuthHeader(req.headers.authorization);
 
-    serverRouter.resolve({
-      pathname: req.path,
-      body: req.body,
-      query: req.query,
-      auth,
-    }).then(result => {
-      if (result === undefined || result === null) {
-        return res.sendStatus(200);
-      } else if ('redirect' in result) {
-        return res.redirect(301, result.redirect);
-      } else if ('next' in result) {
-        return next();
-      } else if ('json' in result) {
-        return res.json(result.json);
-      } else {
-        return exhaust(result);
-      }
-    }).catch(err => {
-      console.error({ err });
-      return res.sendStatus(500);
+      console.error({ path: req.path, query: req.query, body: req.query });
+
+      serverRouter.resolve({
+        pathname: req.path,
+        body: req.body,
+        query: req.query,
+        auth,
+      }).then(result => {
+        if (result === undefined || result === null) {
+          return res.sendStatus(200);
+        } else if ('redirect' in result) {
+          return res.redirect(301, result.redirect);
+        } else if ('json' in result) {
+          return res.json(result.json);
+        } else {
+          return exhaust(result);
+        }
+      }).catch(err => {
+        console.error({ err });
+        return res.sendStatus(500);
+      });
     });
+
+    router.use(serveStatic);
+    router.get('*', (req, res, next) => {
+      req.url = 'http://localhost:8080/index.html';
+      return serveStatic(req, res, next);
+    });
+
+    return router;
   };
 
 interface ServeProps {
@@ -56,7 +64,6 @@ export const serve = (props: ServeProps) => {
   const app = express();
 
   app.use(serverRoute);
-  app.use(serveStatic(publicDir));
 
   app.listen(port, () => {
     console.log(`Serves ${publicDir}`);
@@ -69,7 +76,7 @@ export const bootstrap = () => {
 
   const host = process.env.HOST || 'localhost';
   const port = +(process.env.PORT || '8080');
-  const distDir = path.resolve(process.env.DIST_DIR || '.', 'dist');
+  const distDir = path.resolve(__dirname, '../../dist');
   const publicDir = path.resolve(distDir, 'public');
 
   const twitterConfig = {
@@ -82,18 +89,10 @@ export const bootstrap = () => {
     },
   };
 
-  console.error({
-    host,
-    port,
-    distDir,
-    publicDir,
-    callback: twitterConfig.callbackURI,
-    consumer_key: twitterConfig.adminAuth.consumer_key,
-  });
-
+  const serveStatic = express.static(publicDir, { fallthrough: true, redirect: false });
   const oauthService = oauthServiceWith(twitterConfig);
   const serverRouter = serverRouterWith(oauthService);
-  const serverRoute = serverRouteWith(serverRouter);
+  const serverRoute = serverRouteWith(serverRouter, serveStatic);
 
   serve({
     port,

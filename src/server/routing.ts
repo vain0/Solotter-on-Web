@@ -4,25 +4,20 @@ import {
   OAuthService,
 } from './infra-twitter';
 
-interface RouteResultJson {
-  json: {};
-}
-
 interface RouteContext {
-  method: 'GET' | 'POST';
-  query: {};
-  body: {};
+  query: unknown;
+  body: unknown;
   auth: string | undefined;
-  oauth?: {
-    verifier: string,
-  };
 }
 
 type RouteResult =
-  | RouteResultJson
-  | { next: boolean }
+  | { json: unknown }
   | { redirect: string }
   | void;
+
+type GetRouteResult =
+  | { static: boolean }
+  | { index: boolean };
 
 export type ServerRouter = Router<RouteContext, RouteResult>;
 
@@ -47,26 +42,39 @@ export const serverRouterWith = (oauthService: OAuthService) => {
         if (context.auth === undefined) {
           return { json: { forbidden: 'bad' } };
         }
-        return await context.next();
+        return await context.next(true);
+      },
+    },
+    {
+      path: '/api/users/name',
+      async action() {
+        // FIXME: Fetch
+        return { json: { displayName: 'John Doe', screenName: 'tap' } };
       },
     },
     {
       path: '/api/tweet',
       async action(context) {
-      },
-    },
-    {
-      path: '/api/hello',
-      async action() {
-        return { json: { hello: 'world' } };
-      },
-    },
-    {
-      // Fallback to static file server.
-      path: '(.*)',
-      action() {
-        return { next: true };
+        const { status } = context.body as { status: string };
+        console.log(status);
+        return { json: { ok: true } };
       },
     },
   ]);
 };
+
+export const pageRouter = new Router<RouteContext, GetRouteResult>([
+  {
+    path: ['/styles/(.*)', '/scripts/(.*)', '/favicon.ico'],
+    action() {
+      return { static: true };
+    },
+  },
+  {
+    // Fallback to static file server.
+    path: '(.*)',
+    action() {
+      return { index: true };
+    },
+  },
+]);

@@ -98,7 +98,7 @@ class WelcomeComponent extends React.Component<{}, {}> {
 
         <main>
           <p>
-            <b>Solotter</b> is a Twitter web client for those who wants stay on work.
+            <b>Solotter</b> is a twitter client for those who want to stay focused on work.
           </p>
 
           <form method='POST' action='/api/twitter-auth-request'>

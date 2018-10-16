@@ -33,7 +33,7 @@ const serverRouteWith = (serverRouter, serveStatic) => {
     const router = express_1.default.Router();
     router.post('*', (req, res) => {
         const auth = parseAuthHeader(req.headers.authorization);
-        console.error({ path: req.path, query: req.query, body: req.query });
+        console.warn({ path: req.path, query: Object.keys(req.query), body: Object.keys(req.body) });
         serverRouter.resolve({
             pathname: req.path,
             body: req.body,
@@ -53,7 +53,7 @@ const serverRouteWith = (serverRouter, serveStatic) => {
                 return utils_1.exhaust(result);
             }
         }).catch(err => {
-            console.error({ err });
+            console.error(err);
             return res.sendStatus(500);
         });
     });
@@ -67,6 +67,8 @@ const serverRouteWith = (serverRouter, serveStatic) => {
 exports.serve = (props) => {
     const { port, publicDir, serverRoute } = props;
     const app = express_1.default();
+    app.use(express_1.default.json());
+    app.use(express_1.default.urlencoded({ extended: true }));
     app.use(serverRoute);
     app.listen(port, () => {
         console.log(`Serves ${publicDir}`);

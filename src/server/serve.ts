@@ -101,18 +101,18 @@ export const bootstrap = () => {
   });
 };
 
+type Injector<D> = <Dx, T>(g: (d: D & Dx) => T) => (d: Dx) => T
+
 /// Creates an injector.
-export const injector = <Da>(a: Da) =>
-  <Dx, T>(g: (cds: Da & Dx) => T): (d: Dx) => T =>
-    (d: Dx) => g(Object.assign({}, a, d))
+export const injector = <Da>(a: Da): Injector<Da> =>
+  g => d => g(Object.assign({}, a, d))
 
 /// Composes two injectors.
 export const coinjector = <Da, Db>(
-  withA: <Dx, T>(g: (d: Da & Dx) => T) => (d: Dx) => T,
-  withB: <Dx, T>(g: (d: Db & Dx) => T) => (d: Dx) => T
-) =>
-  <Dx, T>(g: (d: Da & Db & Dx) => T): (d: Dx) => T =>
-    withB(withA(g))
+  withA: Injector<Da>,
+  withB: Injector<Db>
+): Injector<Da & Db> =>
+  g => withB(withA(g))
 
 export const serveTests: TestSuite = ({ test, is }) => {
   test('hello', () => {

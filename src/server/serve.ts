@@ -101,6 +101,19 @@ export const bootstrap = () => {
   });
 };
 
+/// Creates an injector.
+export const injector = <Da>(a: Da) =>
+  <Dx, T>(g: (cds: Da & Dx) => T): (d: Dx) => T =>
+    (d: Dx) => g(Object.assign({}, a, d))
+
+/// Composes two injectors.
+export const coinjector = <Da, Db>(
+  withA: <Dx, T>(g: (d: Da & Dx) => T) => (d: Dx) => T,
+  withB: <Dx, T>(g: (d: Db & Dx) => T) => (d: Dx) => T
+) =>
+  <Dx, T>(g: (d: Da & Db & Dx) => T): (d: Dx) => T =>
+    withB(withA(g))
+
 export const serveTests: TestSuite = ({ test, is }) => {
   test('hello', () => {
     is(2 * 3, 6);
@@ -111,4 +124,20 @@ export const serveTests: TestSuite = ({ test, is }) => {
     is(parseAuthHeader(undefined), undefined);
     is(parseAuthHeader('Basic hoge'), undefined);
   });
+
+  test("injectors", () => {
+    const withHello = injector({ hello: "hello" })
+    const withAnswer = injector({ answer: 42 })
+    const withHelloAnswer = coinjector(withHello, withAnswer)
+    const withHelloWorldAnswer = coinjector(withHelloAnswer, injector({ world: "world" }))
+
+    withHelloAnswer(({ hello, answer }) => {
+      is(hello, "hello")
+      is(answer, 42)
+    })({})
+
+    withHelloWorldAnswer(({ hello, world, answer }) => {
+      is(hello + world, "helloworld")
+    })({})
+  })
 };

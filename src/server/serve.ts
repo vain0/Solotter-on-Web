@@ -22,7 +22,7 @@ const serverRouteWith =
     router.post('*', (req, res) => {
       const auth = parseAuthHeader(req.headers.authorization);
 
-      console.error({ path: req.path, query: req.query, body: req.query });
+      console.warn({ path: req.path, query: Object.keys(req.query), body: Object.keys(req.body) });
 
       serverRouter.resolve({
         pathname: req.path,
@@ -40,7 +40,7 @@ const serverRouteWith =
           return exhaust(result);
         }
       }).catch(err => {
-        console.error({ err });
+        console.error(err);
         return res.sendStatus(500);
       });
     });
@@ -64,6 +64,8 @@ export const serve = (props: ServeProps) => {
   const { port, publicDir, serverRoute } = props;
   const app = express();
 
+  app.use(express.json())
+  app.use(express.urlencoded({ extended: true }))
   app.use(serverRoute);
 
   app.listen(port, () => {

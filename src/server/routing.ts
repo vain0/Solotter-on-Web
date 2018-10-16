@@ -12,8 +12,7 @@ interface RouteContext {
 
 type RouteResult =
   | { json: unknown }
-  | { redirect: string }
-  | void;
+  | { redirect: string };
 
 type GetRouteResult =
   | { static: boolean }
@@ -25,15 +24,26 @@ export const serverRouterWith = (oauthService: OAuthService) => {
   return new Router<RouteContext, RouteResult>([
     {
       path: '/api/twitter-auth-request',
-      action: () => oauthService.oauthRequest(),
+      async action({ body }) {
+        const { authId } = body as { authId: string }
+        return await oauthService.oauthRequest(authId)
+      },
     },
     {
       path: '/api/twitter-auth-callback',
       async action(context) {
         const q = context.query as OAuthCallbackQuery;
-        const { userAuth } = await oauthService.oauthCallback(q);
-        return { json: userAuth };
+        await oauthService.oauthCallback(q);
+        return { redirect: '/' };
       },
+    },
+    {
+      path: '/api/twitter-auth-end',
+      async action({ body }) {
+        const { authId } = body as { authId: string }
+        const userAuth = await oauthService.oauthEnd(authId)
+        return { json: { userAuth } }
+      }
     },
     {
       // Except for the above two, we require valid authorization header.

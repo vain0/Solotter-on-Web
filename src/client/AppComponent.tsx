@@ -1,17 +1,7 @@
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import { AccessUser, NextState, TwitterAuth } from '../types';
-
-const retrieveTwitterAuth = () => {
-  const twitterAuthJson = window.localStorage.getItem('twitterAuth');
-  return twitterAuthJson && JSON.parse(twitterAuthJson) as TwitterAuth;
-};
-
-const saveTwitterAuth = (auth: TwitterAuth) => {
-  window.localStorage.setItem('twitterAuth', JSON.stringify(auth));
-};
-
-const maybeLoggedIn = () => !!retrieveTwitterAuth();
+import uuid from 'uuid/v4';
 
 const fetchPOST = (pathname: string, body: unknown) => {
   return fetch(pathname, {
@@ -29,17 +19,61 @@ const fetchPOST = (pathname: string, body: unknown) => {
   });
 };
 
-const apiAccessUser = async () => {
-  const auth = retrieveTwitterAuth();
-  if (!auth) return undefined;
+const retrieveAuthId = () => {
+  let authId = window.localStorage.getItem("solotterAuthId");
+  if (!authId) {
+    authId = uuid();
+    window.localStorage.setItem("solotterAuthId", authId);
+  }
+  return authId;
+}
 
+const retrieveTwitterAuth = () => {
+  const twitterAuthJson = window.localStorage.getItem('twitterAuth');
+  return twitterAuthJson && JSON.parse(twitterAuthJson) as TwitterAuth;
+};
+
+const maybeLoggedIn = () => !!retrieveTwitterAuth();
+
+const saveTwitterAuth = (auth: TwitterAuth) => {
+  window.localStorage.setItem('twitterAuth', JSON.stringify(auth));
+};
+
+const apiAuthEnd = async (authId: string) => {
+  const data = await fetchPOST('/api/twitter-auth/end', { authId });
+  const { userAuth } = data as { userAuth: TwitterAuth | undefined };
+  return userAuth
+}
+
+const apiAccessUser = async (auth: TwitterAuth) => {
   const data = await fetchPOST('/api/users/name', { auth });
   const user = data as { displayName: string; screenName: string };
   return { ...user, auth };
 };
 
+const retrieveAccessUser = async (authId: string) => {
+  // In case you are already logged in.
+  {
+    const auth = retrieveTwitterAuth();
+    if (auth) {
+      return await apiAccessUser(auth);
+    }
+  }
+
+  // In case it's at the end of auth flow.
+  {
+    const auth = await apiAuthEnd(authId);
+    if (auth) {
+      saveTwitterAuth(auth);
+      return await apiAccessUser(auth);
+    }
+  }
+  return undefined;
+}
+
 interface AppState {
   loading: boolean;
+  authId: string;
   accessUser: AccessUser | undefined;
 }
 
@@ -49,20 +83,20 @@ class AppComponent extends React.Component<{}, AppState> {
 
     this.state = {
       loading: maybeLoggedIn(),
+      authId: retrieveAuthId(),
       accessUser: undefined,
     };
   }
 
   async componentDidMount() {
-    const accessUser = await apiAccessUser();
-    if (accessUser) {
-      saveTwitterAuth(accessUser.auth);
-    }
+    const { authId } = this.state;
+
+    const accessUser = await retrieveAccessUser(authId);
     this.setState({ loading: false, accessUser });
   }
 
   render() {
-    const { loading, accessUser } = this.state;
+    const { loading, authId, accessUser } = this.state;
 
     if (loading) {
       return (
@@ -81,14 +115,14 @@ class AppComponent extends React.Component<{}, AppState> {
     }
 
     if (accessUser === undefined) {
-      return <WelcomeComponent />;
+      return <WelcomeComponent authId={authId} />;
     }
 
     return <TweetComponent accessUser={accessUser} />;
   }
 }
 
-class WelcomeComponent extends React.Component<{}, {}> {
+class WelcomeComponent extends React.Component<{ authId: string }, {}> {
   render() {
     return (
       <article id='welcome-component'>
@@ -102,6 +136,7 @@ class WelcomeComponent extends React.Component<{}, {}> {
           </p>
 
           <form method='POST' action='/api/twitter-auth-request'>
+            <input type="hidden" name="authId" value={this.props.authId} />
             <button>Login with Twitter</button>
           </form>
         </main>

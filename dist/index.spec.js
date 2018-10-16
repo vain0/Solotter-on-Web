@@ -19,9 +19,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const assert = __importStar(require("assert"));
-const serve_1 = require("./server/serve");
 const mocha_1 = require("mocha");
 const universal_router_1 = __importDefault(require("universal-router"));
+const serve_1 = require("./server/serve");
 const toolkit = {
     describe: mocha_1.describe,
     test: mocha_1.test,

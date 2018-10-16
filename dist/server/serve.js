@@ -1,4 +1,12 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : new P(function (resolve) { resolve(result.value); }).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -16,6 +24,7 @@ const path = __importStar(require("path"));
 const utils_1 = require("../utils");
 const infra_twitter_1 = require("./infra-twitter");
 const routing_1 = require("./routing");
+const v4_1 = __importDefault(require("uuid/v4"));
 const parseAuthHeader = (a) => {
     const s = a && a.split(' ') || [];
     return s[0] === 'Bearer' && s[1] || undefined;
@@ -98,5 +107,27 @@ exports.serveTests = ({ test, is }) => {
         is(parseAuthHeader(undefined), undefined);
         is(parseAuthHeader('Basic hoge'), undefined);
     });
+    test('auth flow', () => __awaiter(this, void 0, void 0, function* () {
+        const serverRouter = routing_1.serverRouterWith(infra_twitter_1.oauthServiceStub());
+        // Firstly user requests auth by clicking button.
+        const authId = v4_1.default();
+        const r1 = yield serverRouter.resolve({
+            pathname: '/api/twitter-auth-request',
+            body: { authId },
+        });
+        is("redirect" in r1, true);
+        // After redirect, twitter auth, then redirect to the callback api.
+        const r2 = yield serverRouter.resolve({
+            pathname: '/api/twitter-auth-callback',
+            query: { oauth_token: 'my_token', oauth_verifier: 'my_verifier', },
+        });
+        is("redirect" in r2, true);
+        // The client fetches auth tokens.
+        const auth = yield serverRouter.resolve({
+            pathname: '/api/twitter-auth-end',
+            body: { authId }
+        });
+        is(auth !== undefined, true);
+    }));
 };
 //# sourceMappingURL=serve.js.map

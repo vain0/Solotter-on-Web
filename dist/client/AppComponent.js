@@ -14,17 +14,13 @@ var __importStar = (this && this.__importStar) || function (mod) {
     result["default"] = mod;
     return result;
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const React = __importStar(require("react"));
 const ReactDOM = __importStar(require("react-dom"));
-const retrieveTwitterAuth = () => {
-    const twitterAuthJson = window.localStorage.getItem('twitterAuth');
-    return twitterAuthJson && JSON.parse(twitterAuthJson);
-};
-const saveTwitterAuth = (auth) => {
-    window.localStorage.setItem('twitterAuth', JSON.stringify(auth));
-};
-const maybeLoggedIn = () => !!retrieveTwitterAuth();
+const v4_1 = __importDefault(require("uuid/v4"));
 const fetchPOST = (pathname, body) => {
     return fetch(pathname, {
         method: 'POST',
@@ -41,33 +37,68 @@ const fetchPOST = (pathname, body) => {
         throw err;
     });
 };
-const apiAccessUser = () => __awaiter(this, void 0, void 0, function* () {
-    const auth = retrieveTwitterAuth();
-    if (!auth)
-        return undefined;
+const retrieveAuthId = () => {
+    let authId = window.localStorage.getItem("solotterAuthId");
+    if (!authId) {
+        authId = v4_1.default();
+        window.localStorage.setItem("solotterAuthId", authId);
+    }
+    return authId;
+};
+const retrieveTwitterAuth = () => {
+    const twitterAuthJson = window.localStorage.getItem('twitterAuth');
+    return twitterAuthJson && JSON.parse(twitterAuthJson);
+};
+const maybeLoggedIn = () => !!retrieveTwitterAuth();
+const saveTwitterAuth = (auth) => {
+    window.localStorage.setItem('twitterAuth', JSON.stringify(auth));
+};
+const apiAuthEnd = (authId) => __awaiter(this, void 0, void 0, function* () {
+    const data = yield fetchPOST('/api/twitter-auth/end', { authId });
+    const { userAuth } = data;
+    return userAuth;
+});
+const apiAccessUser = (auth) => __awaiter(this, void 0, void 0, function* () {
     const data = yield fetchPOST('/api/users/name', { auth });
     const user = data;
     return Object.assign({}, user, { auth });
+});
+const retrieveAccessUser = (authId) => __awaiter(this, void 0, void 0, function* () {
+    // In case you are already logged in.
+    {
+        const auth = retrieveTwitterAuth();
+        if (auth) {
+            return yield apiAccessUser(auth);
+        }
+    }
+    // In case it's at the end of auth flow.
+    {
+        const auth = yield apiAuthEnd(authId);
+        if (auth) {
+            saveTwitterAuth(auth);
+            return yield apiAccessUser(auth);
+        }
+    }
+    return undefined;
 });
 class AppComponent extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
             loading: maybeLoggedIn(),
+            authId: retrieveAuthId(),
             accessUser: undefined,
         };
     }
     componentDidMount() {
         return __awaiter(this, void 0, void 0, function* () {
-            const accessUser = yield apiAccessUser();
-            if (accessUser) {
-                saveTwitterAuth(accessUser.auth);
-            }
+            const { authId } = this.state;
+            const accessUser = yield retrieveAccessUser(authId);
             this.setState({ loading: false, accessUser });
         });
     }
     render() {
-        const { loading, accessUser } = this.state;
+        const { loading, authId, accessUser } = this.state;
         if (loading) {
             return (React.createElement("article", { id: 'loading-component' },
                 React.createElement("header", null,
@@ -76,7 +107,7 @@ class AppComponent extends React.Component {
                     React.createElement("div", { className: 'loading-message' }, "Loading..."))));
         }
         if (accessUser === undefined) {
-            return React.createElement(WelcomeComponent, null);
+            return React.createElement(WelcomeComponent, { authId: authId });
         }
         return React.createElement(TweetComponent, { accessUser: accessUser });
     }
@@ -91,6 +122,7 @@ class WelcomeComponent extends React.Component {
                     React.createElement("b", null, "Solotter"),
                     " is a twitter client for those who want to stay focused on work."),
                 React.createElement("form", { method: 'POST', action: '/api/twitter-auth-request' },
+                    React.createElement("input", { type: "hidden", name: "authId", value: this.props.authId }),
                     React.createElement("button", null, "Login with Twitter")))));
     }
 }

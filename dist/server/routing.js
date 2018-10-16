@@ -16,17 +16,32 @@ exports.serverRouterWith = (oauthService) => {
     return new universal_router_1.default([
         {
             path: '/api/twitter-auth-request',
-            action: () => oauthService.oauthRequest(),
+            action({ body }) {
+                return __awaiter(this, void 0, void 0, function* () {
+                    const { authId } = body;
+                    return yield oauthService.oauthRequest(authId);
+                });
+            },
         },
         {
             path: '/api/twitter-auth-callback',
             action(context) {
                 return __awaiter(this, void 0, void 0, function* () {
                     const q = context.query;
-                    const { userAuth } = yield oauthService.oauthCallback(q);
-                    return { json: userAuth };
+                    yield oauthService.oauthCallback(q);
+                    return { redirect: '/' };
                 });
             },
+        },
+        {
+            path: '/api/twitter-auth-end',
+            action({ body }) {
+                return __awaiter(this, void 0, void 0, function* () {
+                    const { authId } = body;
+                    const userAuth = yield oauthService.oauthEnd(authId);
+                    return { json: { userAuth } };
+                });
+            }
         },
         {
             // Except for the above two, we require valid authorization header.

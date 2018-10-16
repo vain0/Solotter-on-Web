@@ -116,56 +116,42 @@ export const coinjector = <Da, Db>(
 ): Injector<Da & Db> =>
   g => withB(withA(g))
 
-interface CInjectorClass<D> {
+interface CInjector<D> {
+  <T>(g: (d: D) => T): T
   get(): D
   extend<X>(x: X): CInjector<D & X>
   combine<Dy>(second: CInjector<Dy>): CInjector<D & Dy>
 }
 
-interface CInjector<D> extends CInjectorClass<D> {
-  <T>(g: (d: D) => T): T
+interface CInjectorImpl<D> extends CInjector<D> {
+  d: D
 }
 
-class DefaultCInjectorClass<D> {
-  constructor(
-    private readonly d: D,
-  ) {
-  }
-
-  get() {
-    return this.d
-  }
-
-  extend<X>(x: X): CInjector<D & X> {
-    const dx = Object.assign({}, this.d, x)
-    return wrap(new DefaultCInjectorClass<D & X>(dx))
-  }
-
-  combine<Dy>(second: CInjector<Dy>): CInjector<D & Dy> {
-    const dxy = Object.assign({}, this.d, second.get())
-    return wrap(new DefaultCInjectorClass<D & Dy>(dxy))
-  }
-}
-
-const wrap = <D>(c: CInjectorClass<D>): CInjector<D> => {
+const createInjector = <D>(d: D): CInjectorImpl<D> => {
   return Object.assign(
-    <T>(g: (d: D) => T): T => {
-      return g(c.get())
-    }, {
-      get() {
-        return c.get()
-      },
-      extend<X>(x: X) {
-        return c.extend(x)
-      },
-      combine<Dy>(second: CInjector<Dy>) {
-        return c.combine(second)
-      }
-    }
-  )
+    <T>(g: (d: D) => T): T => g(d),
+    injectorMethods,
+    { d },
+  ) as any
 }
 
-const pure = wrap(new DefaultCInjectorClass<{}>({}))
+const injectorMethods = {
+  get<D>(this: CInjectorImpl<D>) {
+    return this.d
+  },
+
+  extend<D, X>(this: CInjectorImpl<D>, x: X): CInjector<D & X> {
+    const dx = Object.assign({}, this.d, x)
+    return createInjector<D & X>(dx)
+  },
+
+  combine<D, Dy>(this: CInjectorImpl<D>, second: CInjector<Dy>): CInjector<D & Dy> {
+    const dxy = Object.assign({}, this.d, second.get())
+    return createInjector<D & Dy>(dxy)
+  },
+}
+
+const pure = createInjector({})
 
 export const serveTests: TestSuite = ({ test, is }) => {
   test('hello', () => {

@@ -101,11 +101,13 @@ export const bootstrap = () => {
   });
 };
 
-type Injector<D> = <Dx, T>(g: (d: D & Dx) => T) => (d: Dx) => T
+type Injector<D> = <Dx, T>(g: (d: D & Dx) => T) => Finalize<(d: Dx) => T>
+
+type Finalize<F> = F extends (...t: infer P) => infer T ? (P extends {} ? () => T : F) : F
 
 /// Creates an injector.
 export const injector = <Da>(a: Da): Injector<Da> =>
-  g => d => g(Object.assign({}, a, d))
+  g => ((d: any) => g(Object.assign({}, a, d))) as any
 
 /// Composes two injectors.
 export const coinjector = <Da, Db>(
@@ -113,6 +115,57 @@ export const coinjector = <Da, Db>(
   withB: Injector<Db>
 ): Injector<Da & Db> =>
   g => withB(withA(g))
+
+interface CInjectorClass<D> {
+  get(): D
+  extend<X>(x: X): CInjector<D & X>
+  combine<Dy>(second: CInjector<Dy>): CInjector<D & Dy>
+}
+
+interface CInjector<D> extends CInjectorClass<D> {
+  <T>(g: (d: D) => T): T
+}
+
+class DefaultCInjectorClass<D> {
+  constructor(
+    private readonly d: D,
+  ) {
+  }
+
+  get() {
+    return this.d
+  }
+
+  extend<X>(x: X): CInjector<D & X> {
+    const dx = Object.assign({}, this.d, x)
+    return wrap(new DefaultCInjectorClass<D & X>(dx))
+  }
+
+  combine<Dy>(second: CInjector<Dy>): CInjector<D & Dy> {
+    const dxy = Object.assign({}, this.d, second.get())
+    return wrap(new DefaultCInjectorClass<D & Dy>(dxy))
+  }
+}
+
+const wrap = <D>(c: CInjectorClass<D>): CInjector<D> => {
+  return Object.assign(
+    <T>(g: (d: D) => T): T => {
+      return g(c.get())
+    }, {
+      get() {
+        return c.get()
+      },
+      extend<X>(x: X) {
+        return c.extend(x)
+      },
+      combine<Dy>(second: CInjector<Dy>) {
+        return c.combine(second)
+      }
+    }
+  )
+}
+
+const pure = wrap(new DefaultCInjectorClass<{}>({}))
 
 export const serveTests: TestSuite = ({ test, is }) => {
   test('hello', () => {
@@ -134,10 +187,30 @@ export const serveTests: TestSuite = ({ test, is }) => {
     withHelloAnswer(({ hello, answer }) => {
       is(hello, "hello")
       is(answer, 42)
-    })({})
+    })()
 
     withHelloWorldAnswer(({ hello, world, answer }) => {
       is(hello + world, "helloworld")
-    })({})
+    })()
+  })
+
+  test("c-injectors", () => {
+    const withHello = pure.extend({ hello: "hello" })
+    const withAnswer = pure.extend({ answer: 42 })
+    const withHelloAnswer = withHello.combine(withAnswer)
+    const withHelloWorldAnswer = withHelloAnswer.extend({ world: "world" })
+
+    withHello(({ hello }) => {
+      is(hello, "hello")
+    })
+
+    withHelloAnswer(({ hello, answer }) => () => {
+      is(hello, "hello")
+      is(answer, 42)
+    })()
+
+    withHelloWorldAnswer(({ hello, world, answer }) => {
+      is(hello + world + answer, "helloworld42")
+    })
   })
 };

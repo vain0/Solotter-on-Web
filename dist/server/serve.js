@@ -31,7 +31,7 @@ const parseAuthHeader = (a) => {
 };
 const serverRouteWith = (serverRouter, serveStatic) => {
     const router = express_1.default.Router();
-    router.post('*', (req, res) => {
+    const handlePOST = (req, res) => {
         const auth = parseAuthHeader(req.headers.authorization);
         console.warn({ path: req.path, query: Object.keys(req.query), body: Object.keys(req.body) });
         serverRouter.resolve({
@@ -56,7 +56,9 @@ const serverRouteWith = (serverRouter, serveStatic) => {
             console.error(err);
             return res.sendStatus(500);
         });
-    });
+    };
+    router.post('*', handlePOST);
+    router.get('/api/twitter-auth-callback', handlePOST);
     router.use(serveStatic);
     router.get('*', (req, res, next) => {
         req.url = 'http://localhost:8080/index.html';

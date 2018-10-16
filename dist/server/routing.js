@@ -74,6 +74,12 @@ exports.serverRouterWith = (oauthService) => {
                 });
             },
         },
+        {
+            path: '(.*)',
+            action({ next }) {
+                return next();
+            }
+        }
     ]);
 };
 exports.pageRouter = new universal_router_1.default([

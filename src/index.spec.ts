@@ -1,7 +1,7 @@
 import * as assert from 'assert';
-import { serveTests } from './server/serve';
-import { test, describe } from 'mocha';
+import { describe, test } from 'mocha';
 import UniversalRouter from 'universal-router';
+import { serveTests } from './server/serve';
 
 const toolkit = {
   describe,

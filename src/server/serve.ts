@@ -1,11 +1,12 @@
 import { config as dotEnvConfig } from 'dotenv';
 import express from 'express';
-import { NextFunction, Request, Response } from 'express';
-import { OAuth } from 'oauth';
 import * as path from 'path';
-import serveStatic from 'serve-static';
-import { TwitterConfig } from '../types';
-import { ServerRouter, serverRouterWith } from './routing';
+import { exhaust } from '../utils';
+import { oauthServiceWith } from './infra-twitter';
+import {
+  ServerRouter,
+  serverRouterWith,
+} from './routing';
 import { TestSuite } from './testing';
 
 const parseAuthHeader = (a: string | undefined): string | undefined => {
@@ -13,22 +14,11 @@ const parseAuthHeader = (a: string | undefined): string | undefined => {
   return s[0] === 'Bearer' && s[1] || undefined;
 };
 
-const exhaust = (x: never) => x;
-
-const oauthClientWith = (twitterConfig: TwitterConfig) =>
-  new OAuth(
-    'https://twitter.com/oauth/request_token',
-    'https://twitter.com/oauth/access_token',
-    twitterConfig.adminAuth.consumer_key,
-    twitterConfig.adminAuth.consumer_secret,
-    '1.0',
-    twitterConfig.callbackURI,
-    'HMAC-SHA1',
-  );
-
 const serverRouteWith =
-  (serverRouter: ServerRouter) =>
-    (req: Request, res: Response, next: NextFunction) => {
+  (serverRouter: ServerRouter, serveStatic: express.Handler) => {
+    const router = express.Router();
+
+    router.post('*', (req, res) => {
       const auth = parseAuthHeader(req.headers.authorization);
 
       console.error({ path: req.path, query: req.query, body: req.query });
@@ -43,8 +33,6 @@ const serverRouteWith =
           return res.sendStatus(200);
         } else if ('redirect' in result) {
           return res.redirect(301, result.redirect);
-        } else if ('next' in result) {
-          return next();
         } else if ('json' in result) {
           return res.json(result.json);
         } else {
@@ -54,14 +42,41 @@ const serverRouteWith =
         console.error({ err });
         return res.sendStatus(500);
       });
-    };
+    });
 
-export const serve = () => {
+    router.use(serveStatic);
+    router.get('*', (req, res, next) => {
+      req.url = 'http://localhost:8080/index.html';
+      return serveStatic(req, res, next);
+    });
+
+    return router;
+  };
+
+interface ServeProps {
+  port: number;
+  publicDir: string;
+  serverRoute: express.RequestHandler;
+}
+
+export const serve = (props: ServeProps) => {
+  const { port, publicDir, serverRoute } = props;
+  const app = express();
+
+  app.use(serverRoute);
+
+  app.listen(port, () => {
+    console.log(`Serves ${publicDir}`);
+    console.log(`Start listening http://localhost:${port}/`);
+  });
+};
+
+export const bootstrap = () => {
   dotEnvConfig();
 
   const host = process.env.HOST || 'localhost';
   const port = +(process.env.PORT || '8080');
-  const distDir = path.resolve(process.env.DIST_DIR || '.', 'dist');
+  const distDir = path.resolve(__dirname, '../../dist');
   const publicDir = path.resolve(distDir, 'public');
 
   const twitterConfig = {
@@ -74,27 +89,15 @@ export const serve = () => {
     },
   };
 
-  console.error({
-    host,
+  const serveStatic = express.static(publicDir, { fallthrough: true, redirect: false });
+  const oauthService = oauthServiceWith(twitterConfig);
+  const serverRouter = serverRouterWith(oauthService);
+  const serverRoute = serverRouteWith(serverRouter, serveStatic);
+
+  serve({
     port,
-    distDir,
     publicDir,
-    callback: twitterConfig.callbackURI,
-    consumer_key: twitterConfig.adminAuth.consumer_key,
-  });
-
-  const oauthClient = oauthClientWith(twitterConfig);
-  const serverRouter = serverRouterWith(oauthClient, twitterConfig);
-  const serverRoute = serverRouteWith(serverRouter);
-
-  const app = express();
-
-  app.use(serverRoute);
-  app.use(serveStatic(publicDir));
-
-  app.listen(port, () => {
-    console.log(`Serves ${publicDir}`);
-    console.log(`Start listening http://${host}:${port}/`);
+    serverRoute,
   });
 };
 

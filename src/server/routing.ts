@@ -1,109 +1,80 @@
-import { OAuth } from 'oauth';
 import Router from 'universal-router';
-import { TwitterConfig } from '../types';
-
-interface RouteResultJson {
-  json: {};
-}
+import {
+  OAuthCallbackQuery,
+  OAuthService,
+} from './infra-twitter';
 
 interface RouteContext {
-  method: 'GET' | 'POST';
-  query: {};
-  body: {};
+  query: unknown;
+  body: unknown;
   auth: string | undefined;
-  oauth?: {
-    verifier: string,
-  };
 }
 
 type RouteResult =
-  | RouteResultJson
-  | { next: boolean }
+  | { json: unknown }
   | { redirect: string }
   | void;
 
+type GetRouteResult =
+  | { static: boolean }
+  | { index: boolean };
+
 export type ServerRouter = Router<RouteContext, RouteResult>;
 
-export const oauthRequest = (oauthClient: OAuth, twitterConfig: TwitterConfig) => {
-  return new Promise<RouteResult>((resolve, reject) => {
-    oauthClient.getOAuthRequestToken((err, token, token_secret) => {
-      if (err) {
-        return reject(err);
-      }
-
-      const redirectURI = `https://twitter.com/oauth/authenticate?oauth_token=${token}`;
-
-      // FIXME: use local storage per client
-      twitterConfig.oauthState = { token, token_secret };
-
-      resolve({ redirect: redirectURI });
-    });
-  });
-};
-
-export const oauthCallback = (oauthClient: OAuth, twitterConfig: TwitterConfig, verifier: string) => {
-  return new Promise<RouteResult>((resolve, reject) => {
-    if (!twitterConfig.oauthState) {
-      return reject('Invalid auth flow.');
-    }
-
-    const { oauthState: { token, token_secret } } = twitterConfig;
-    return oauthClient.getOAuthAccessToken(token, token_secret, verifier,
-      (err, token, token_secret, results) => {
-        if (err) {
-          return reject(err);
+export const serverRouterWith = (oauthService: OAuthService) => {
+  return new Router<RouteContext, RouteResult>([
+    {
+      path: '/api/twitter-auth-request',
+      action: () => oauthService.oauthRequest(),
+    },
+    {
+      path: '/api/twitter-auth-callback',
+      async action(context) {
+        const q = context.query as OAuthCallbackQuery;
+        const { userAuth } = await oauthService.oauthCallback(q);
+        return { json: userAuth };
+      },
+    },
+    {
+      // Except for the above two, we require valid authorization header.
+      path: '/api/(.*)',
+      async action(context) {
+        if (context.auth === undefined) {
+          return { json: { forbidden: 'bad' } };
         }
-
-        const userAuth = { ...twitterConfig.adminAuth, token, token_secret };
-
-        // FIXME: use local storage per client
-        twitterConfig.userAuth = userAuth;
-
-        resolve({ redirect: '/' });
-      });
-  });
+        return await context.next(true);
+      },
+    },
+    {
+      path: '/api/users/name',
+      async action() {
+        // FIXME: Fetch
+        return { json: { displayName: 'John Doe', screenName: 'tap' } };
+      },
+    },
+    {
+      path: '/api/tweet',
+      async action(context) {
+        const { status } = context.body as { status: string };
+        console.log(status);
+        return { json: { ok: true } };
+      },
+    },
+  ]);
 };
 
-export const serverRouterWith = (oauthClient: OAuth, twitterConfig: TwitterConfig) => new Router<RouteContext, RouteResult>([
+export const pageRouter = new Router<RouteContext, GetRouteResult>([
   {
-    path: '/api/twitter-auth-request',
-    action: () => oauthRequest(oauthClient, twitterConfig),
-  },
-  {
-    path: '/api/twitter-auth-callback',
-    async action(context) {
-      const verifier = (context.query as any).oauth_verifier as string | undefined;
-      if (!verifier) {
-        return { json: { err: 'Invalid auth flow' } };
-      }
-      return await oauthCallback(oauthClient, twitterConfig, verifier);
+    path: ['/styles/(.*)', '/scripts/(.*)', '/favicon.ico'],
+    action() {
+      return { static: true };
     },
   },
   {
-    // Except for the above two, we require valid authorization header.
+    // Fallback to static file server.
     path: '(.*)',
-    async action(context) {
-      if (context.auth === undefined) {
-        return { json: { forbidden: 'bad' } };
-      }
-      return await context.next();
-    },
-  },
-  {
-    path: '/api/tweet',
-    async action(context) {
-    },
-  },
-  {
-    path: '/api/hello',
-    async action() {
-      return { json: { hello: 'world' } };
-    },
-  },
-  {
-    path: '(.*)',
-    async action() {
-      return { next: true };
+    action() {
+      return { index: true };
     },
   },
 ]);

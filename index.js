@@ -1,1 +1,1 @@
-require('./dist/server/serve').serve();
+require('./dist/server/serve').bootstrap();

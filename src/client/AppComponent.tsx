@@ -40,7 +40,7 @@ const saveTwitterAuth = (auth: TwitterAuth) => {
 };
 
 const apiAuthEnd = async (authId: string) => {
-  const data = await fetchPOST('/api/twitter-auth/end', { authId });
+  const data = await fetchPOST('/api/twitter-auth-end', { authId });
   const { userAuth } = data as { userAuth: TwitterAuth | undefined };
   return userAuth
 }

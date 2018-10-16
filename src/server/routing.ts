@@ -46,7 +46,7 @@ export const serverRouterWith = (oauthService: OAuthService) => {
       }
     },
     {
-      // Except for the above two, we require valid authorization header.
+      // Except for the above three, we require valid authorization header.
       path: '/api/(.*)',
       async action(context) {
         if (context.auth === undefined) {

@@ -70,6 +70,12 @@ export const serverRouterWith = (oauthService: OAuthService) => {
         return { json: { ok: true } };
       },
     },
+    {
+      path: '(.*)',
+      action({ next }) {
+        return next();
+      }
+    }
   ]);
 };
 

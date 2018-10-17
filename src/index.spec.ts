@@ -1,62 +1,64 @@
-import * as assert from 'assert';
-import { describe, test } from 'mocha';
-import UniversalRouter from 'universal-router';
-import { serveTests } from './server/serve';
+import * as assert from "assert"
+import { describe, test } from "mocha"
+import UniversalRouter from "universal-router"
+import { integTests } from "./integ.spec"
+import { serveTests } from "./server/serve"
 
 const toolkit = {
   describe,
   test,
   is: assert.deepStrictEqual,
-};
+}
 
-test('hello', () => {
-  assert.strictEqual(1 + 2 * 3, 7);
-});
+describe("serveTests", () => serveTests(toolkit))
+describe("integTests", () => integTests(toolkit))
 
-describe('serveTests', () => serveTests(toolkit));
+test("hello", () => {
+  assert.strictEqual(1 + 2 * 3, 7)
+})
 
-describe('JavaScript', () => {
-  describe('String', () => {
-    const r = new RegExp('^Bearer ([a-fA-F0-9]+)$');
-    test('it should match', () => {
-      const match = 'Bearer deadbeaf'.match(r);
-      assert.strictEqual(match && match[1], 'deadbeaf');
-    });
+describe("JavaScript", () => {
+  describe("String", () => {
+    const r = new RegExp("^Bearer ([a-fA-F0-9]+)$")
+    test("it should match", () => {
+      const match = "Bearer deadbeaf".match(r)
+      assert.strictEqual(match && match[1], "deadbeaf")
+    })
 
-    test('it should not match', () => {
-      const second = 'Basic YWxhZGRpbjpvcGVuc2VzYW1l'.match(r);
-      assert.strictEqual(second && second[1], null);
-    });
-  });
-});
+    test("it should not match", () => {
+      const second = "Basic YWxhZGRpbjpvcGVuc2VzYW1l".match(r)
+      assert.strictEqual(second && second[1], null)
+    })
+  })
+})
 
-describe('universal-router', () => {
-  const { is } = toolkit;
+describe("universal-router", () => {
+  const { is } = toolkit
 
-  test('next', async () => {
+  test("next", async () => {
     const router = new UniversalRouter<{ auth: boolean }, {}>([
       {
-        path: '/',
-        action: () => '/',
+        path: "/",
+        action: () => "/",
       },
       {
-        path: '(.*)',
+        path: "(.*)",
         action({ auth, next }) {
           if (auth) {
-            return next();
+            return next()
           } else {
-            return '/forbidden';
+            return "/forbidden"
           }
         },
       },
       {
-        path: '/secret',
-        action: () => '/secret',
+        path: "/secret",
+        action: () => "/secret",
       },
-    ]);
+    ])
 
-    is(await router.resolve({ pathname: '/', auth: false }), '/');
-    is(await router.resolve({ pathname: '/secret', auth: false }), '/forbidden');
-    is(await router.resolve({ pathname: '/secret', auth: true }), '/secret');
-  });
-});
+    is(await router.resolve({ pathname: "/", auth: false }), "/")
+    is(await router.resolve({ pathname: "/secret", auth: false }), "/forbidden")
+    is(await router.resolve({ pathname: "/secret", auth: true }), "/secret")
+  })
+})

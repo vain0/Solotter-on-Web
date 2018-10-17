@@ -1,3 +1,3 @@
-import { main } from './AppComponent';
+import { main } from "./AppComponent"
 
-main();
+main()

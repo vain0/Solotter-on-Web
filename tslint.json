@@ -4,11 +4,12 @@
     "rules": {
         "semicolon": [
             true,
-            "always"
+            "never",
+            "ignore-interfaces"
         ],
         "quotemark": [
             true,
-            "single"
+            "double"
         ],
         "trailing-comma": [
             true,

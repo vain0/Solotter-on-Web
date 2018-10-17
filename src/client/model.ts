@@ -1,6 +1,7 @@
 import uuid from "uuid/v4"
 import { APIClient } from "../api"
 import { AccessUser, AppState, KeyValueStorage, TwitterUserAuth } from "../types"
+import { partial } from "../utils"
 
 export class AppModel {
   constructor(
@@ -40,10 +41,12 @@ export class AppModel {
     }
 
     // In case it's at the end of auth flow; or before anything happen.
-    const { userAuth } = await this.apiClient.post("/api/twitter-auth-end", { authId })
+    const { userAuth } = partial(
+      await this.apiClient.post("/api/twitter-auth-end", { authId }).catch(),
+    )
     if (!userAuth) return undefined
 
-    const accessUser = await this.apiClient.post("/api/users/name", { userAuth })
+    const accessUser = await this.apiClient.post("/api/users/name", { userAuth }).catch()
     if (!accessUser) return undefined
 
     this.saveAccessUesr(accessUser)

@@ -14,7 +14,7 @@ export interface APISchema {
   }
   "/api/twitter-auth-end": {
     request: { authId: string }
-    response: { userAuth: TwitterUserAuth | undefined },
+    response: { userAuth: TwitterUserAuth } | undefined,
   }
   "/api/users/name": {
     request: { userAuth: TwitterUserAuth },

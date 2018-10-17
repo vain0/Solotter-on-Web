@@ -38,7 +38,7 @@ export class ServerAPIServer implements APIServer {
   async "/api/twitter-auth-end"(body: APIReq<"/api/twitter-auth-end">) {
     const { authId } = body
     const userAuth = await this.oauthService.oauthEnd(authId)
-    return { json: { userAuth } }
+    return { json: userAuth && { userAuth } }
   }
 
   async "/api/users/name"(body: APIReq<"/api/users/name">) {

@@ -121,31 +121,4 @@ export const serveTests: TestSuite = ({ test, is }) => {
     is(parseAuthHeader(undefined), undefined)
     is(parseAuthHeader("Basic hoge"), undefined)
   })
-
-  test("auth flow", async () => {
-    const apiServer = new ServerAPIServer(oauthServiceStub())
-    const serverRouter = serverRouterWith(apiServer)
-
-    // Firstly user requests auth by clicking button.
-    const authId = uuid()
-    const r1 = await serverRouter.resolve({
-      pathname: "/api/twitter-auth-request",
-      body: { authId },
-    })
-    is("redirect" in r1, true)
-
-    // After redirect, twitter auth, then redirect to the callback api.
-    const r2 = await serverRouter.resolve({
-      pathname: "/api/twitter-auth-callback",
-      query: { oauth_token: "my_token", oauth_verifier: "my_verifier" },
-    })
-    is("redirect" in r2, true)
-
-    // The client fetches auth tokens.
-    const auth = await serverRouter.resolve({
-      pathname: "/api/twitter-auth-end",
-      body: { authId },
-    })
-    is(auth !== undefined, true)
-  })
 }

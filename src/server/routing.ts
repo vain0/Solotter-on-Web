@@ -63,9 +63,9 @@ export class ServerAPIServer implements APIServer {
 export type ServerRouter = Router<RouteContext, RouteResult>
 
 export const serverRouterWith = (apiServer: APIServer) => {
-  const paths = Object.keys(apiServer)
-  const preAuth = paths.filter(p => p.startsWith("/tweet-auth-"))
-  const postAuth = paths.filter(p => !p.startsWith("/tweet-auth-"))
+  const paths = Object.getOwnPropertyNames(ServerAPIServer.prototype)
+  const preAuth = paths.filter(p => p.startsWith("/api/twitter-auth-"))
+  const postAuth = paths.filter(p => p.startsWith("/") && !p.startsWith("/api/twitter-auth-"))
 
   const route = (path: string) => {
     return {

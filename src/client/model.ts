@@ -19,7 +19,7 @@ export class AppModel {
   }
 
   maybeLoggedIn() {
-    return this.storage.has("authId")
+    return this.storage.has("accessUser")
   }
 
   getAccessUser() {
@@ -52,14 +52,14 @@ export class AppModel {
 
   initState(): AppState {
     return {
-      loading: this.maybeLoggedIn(),
+      loading: !this.maybeLoggedIn(),
       authId: this.getAuthId(),
       accessUser: undefined,
     }
   }
 
   async didMount(): Promise<Pick<AppState, "loading" | "accessUser">> {
-    const accessUser = await this.getAccessUser()
+    const accessUser = await this.fetchAccessUser()
     return {
       loading: false,
       accessUser,

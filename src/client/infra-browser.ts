@@ -1,7 +1,7 @@
 //! Provides things that depend on web browser's features.
 
-import uuid from "uuid/v4"
-import { TwitterAuth } from "../types"
+import { APIClient, APIReq, APIRes, APISchema } from "../api"
+import { KeyValueStorage } from "../types"
 
 export const fetchPOST = async (pathname: string, body: unknown) => {
   try {
@@ -22,54 +22,29 @@ export const fetchPOST = async (pathname: string, body: unknown) => {
   }
 }
 
-export const retrieveAuthId = () => {
-  let authId = window.localStorage.getItem("solotterAuthId")
-  if (!authId) {
-    authId = uuid()
-    window.localStorage.setItem("solotterAuthId", authId)
+export class BrowserAPIClient implements APIClient {
+  async post<P extends keyof APISchema>(pathname: P, body: APIReq<P>): Promise<APIRes<P>> {
+    return (await fetchPOST(pathname, body)) as APIRes<P>
   }
-  return authId
 }
 
-export const retrieveTwitterAuth = () => {
-  const twitterAuthJson = window.localStorage.getItem("twitterAuth")
-  return twitterAuthJson && JSON.parse(twitterAuthJson) as TwitterAuth
-}
-
-export const maybeLoggedIn = () => !!retrieveTwitterAuth()
-
-export const saveTwitterAuth = (auth: TwitterAuth) => {
-  window.localStorage.setItem("twitterAuth", JSON.stringify(auth))
-}
-
-export const apiAuthEnd = async (authId: string) => {
-  const data = await fetchPOST("/api/twitter-auth-end", { authId })
-  const { userAuth } = data as { userAuth: TwitterAuth | undefined }
-  return userAuth
-}
-
-export const apiAccessUser = async (auth: TwitterAuth) => {
-  const data = await fetchPOST("/api/users/name", { auth })
-  const user = data as { displayName: string; screenName: string }
-  return { ...user, auth }
-}
-
-export const retrieveAccessUser = async (authId: string) => {
-  // In case you are already logged in.
-  {
-    const auth = retrieveTwitterAuth()
-    if (auth) {
-      return await apiAccessUser(auth)
-    }
+export class BrowserKeyValueStorage implements KeyValueStorage {
+  constructor(
+    private readonly storage: Storage,
+  ) {
   }
 
-  // In case it's at the end of auth flow.
-  {
-    const auth = await apiAuthEnd(authId)
-    if (auth) {
-      saveTwitterAuth(auth)
-      return await apiAccessUser(auth)
-    }
+  has(key: string): boolean {
+    return this.storage.getItem(key) !== null
   }
-  return undefined
+
+  get(key: string): unknown | undefined {
+    const json = this.storage.getItem(key)
+    if (!json) return undefined
+    return JSON.parse(json)
+  }
+
+  set(key: string, value: unknown) {
+    this.storage.setItem(key, JSON.stringify(value))
+  }
 }

@@ -2,13 +2,14 @@ import { config as dotEnvConfig } from "dotenv"
 import express from "express"
 import * as path from "path"
 import uuid from "uuid/v4"
+import { TestSuite } from "../types"
 import { exhaust } from "../utils"
-import { oauthServiceStub, oauthServiceWith } from "./infra-twitter"
+import { oauthClientWith, oauthServiceStub, oauthServiceWith } from "./infra-twitter"
 import {
+  ServerAPIServer,
   ServerRouter,
   serverRouterWith,
 } from "./routing"
-import { TestSuite } from "./testing"
 
 const parseAuthHeader = (a: string | undefined): string | undefined => {
   const s = a && a.split(" ") || []
@@ -26,16 +27,17 @@ const serverRouteWith =
 
       serverRouter.resolve({
         pathname: req.path,
-        body: req.body,
-        query: req.query,
+        body: req.method === "POST" ? req.body : req.query,
         auth,
       }).then(result => {
         if (result === undefined || result === null) {
-          return res.sendStatus(200)
-        } else if ("redirect" in result) {
-          return res.redirect(301, result.redirect)
+          throw new Error("Unexpectedly result is null or undefined.")
         } else if ("json" in result) {
           return res.json(result.json)
+        } else if ("redirect" in result) {
+          return res.redirect(301, result.redirect)
+        } else if ("forbidden" in result) {
+          return res.sendStatus(403)
         } else {
           return exhaust(result)
         }
@@ -96,8 +98,10 @@ export const bootstrap = () => {
   }
 
   const serveStatic = express.static(publicDir, { fallthrough: true, redirect: false })
-  const oauthService = oauthServiceWith(twitterConfig)
-  const serverRouter = serverRouterWith(oauthService)
+  const oauthClient = oauthClientWith(twitterConfig)
+  const oauthService = oauthServiceWith(oauthClient)
+  const apiServer = new ServerAPIServer(oauthService)
+  const serverRouter = serverRouterWith(apiServer)
   const serverRoute = serverRouteWith(serverRouter, serveStatic)
 
   serve({
@@ -119,7 +123,8 @@ export const serveTests: TestSuite = ({ test, is }) => {
   })
 
   test("auth flow", async () => {
-    const serverRouter = serverRouterWith(oauthServiceStub())
+    const apiServer = new ServerAPIServer(oauthServiceStub())
+    const serverRouter = serverRouterWith(apiServer)
 
     // Firstly user requests auth by clicking button.
     const authId = uuid()

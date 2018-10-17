@@ -1,6 +1,7 @@
 import * as assert from "assert"
 import { describe, test } from "mocha"
 import UniversalRouter from "universal-router"
+import { integTests } from "./integ.spec"
 import { serveTests } from "./server/serve"
 
 const toolkit = {
@@ -9,11 +10,12 @@ const toolkit = {
   is: assert.deepStrictEqual,
 }
 
+describe("serveTests", () => serveTests(toolkit))
+describe("integTests", () => integTests(toolkit))
+
 test("hello", () => {
   assert.strictEqual(1 + 2 * 3, 7)
 })
-
-describe("serveTests", () => serveTests(toolkit))
 
 describe("JavaScript", () => {
   describe("String", () => {

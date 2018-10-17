@@ -1,33 +1,27 @@
 import * as React from "react"
 import * as ReactDOM from "react-dom"
-import { AppState, NextState, TweetProps, TweetState } from "../types"
-import {
-  fetchPOST,
-  maybeLoggedIn,
-  retrieveAccessUser,
-  retrieveAuthId,
-} from "./infra-browser"
+import { AccessUser, AppState, NextState, TweetState } from "../types"
+import { BrowserAPIClient, BrowserKeyValueStorage, fetchPOST } from "./infra-browser"
+import { AppModel } from "./model"
 
-class AppComponent extends React.Component<{}, AppState> {
-  constructor(props: {}) {
+interface TweetProps {
+  model: AppModel
+  accessUser: AccessUser
+}
+
+class AppComponent extends React.Component<{ model: AppModel }, AppState> {
+  constructor(props: { model: AppModel }) {
     super(props)
-
-    this.state = {
-      loading: maybeLoggedIn(),
-      authId: retrieveAuthId(),
-      accessUser: undefined,
-    }
+    this.state = props.model.initState()
   }
 
   async componentDidMount() {
-    const { authId } = this.state
-
-    const accessUser = await retrieveAccessUser(authId)
-    this.setState({ loading: false, accessUser })
+    const { props: { model } } = this
+    this.setState(await model.didMount())
   }
 
   render() {
-    const { loading, authId, accessUser } = this.state
+    const { props: { model }, state: { loading, authId, accessUser } } = this
 
     if (loading) {
       return (
@@ -49,7 +43,7 @@ class AppComponent extends React.Component<{}, AppState> {
       return <WelcomeComponent authId={authId} />
     }
 
-    return <TweetComponent accessUser={accessUser} />
+    return <TweetComponent model={model} accessUser={accessUser} />
   }
 }
 
@@ -150,8 +144,12 @@ class TweetComponent extends React.Component<TweetProps, TweetState> {
 }
 
 export const main = async () => {
+  const apiClient = new BrowserAPIClient()
+  const storage = new BrowserKeyValueStorage(window.localStorage)
+  const model = new AppModel(apiClient, storage)
+
   ReactDOM.render(
-    <AppComponent />,
+    <AppComponent model={model} />,
     document.getElementById("app"),
   )
 }

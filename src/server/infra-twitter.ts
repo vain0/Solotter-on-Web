@@ -1,7 +1,7 @@
 import { OAuth } from "oauth"
 import * as request from "request-promise-native"
-import { TwitterAuth, TwitterConfig } from "../types"
-import { partial } from "../utils"
+import uuid from "uuid/v4"
+import { TwitterAuth, TwitterConfig, TwitterUserAuth } from "../types"
 
 const USER_AGENT = "solotter-web"
 const REST_API_BASE = "https://api.twitter.com/1.1"
@@ -50,43 +50,78 @@ interface OAuthCallbackParams {
   oauth_verifier: string
 }
 
+type OAuthClientCallback = (err: any, token: string, token_secret: string) => void
+
+interface OAuthClient {
+  getOAuthRequestToken(callback: OAuthClientCallback): void
+
+  getOAuthAccessToken(
+    oauth_token: string,
+    oauth_token_secret: string,
+    oauth_verifier: string,
+    callback: OAuthClientCallback,
+  ): void
+}
+
 export interface OAuthService {
-  oauthRequest(authId: string): Promise<{ redirect: string }>
+  oauthRequest(authId: string): Promise<{ oauth_token: string, redirect: string }>
   oauthCallback(params: OAuthCallbackParams): Promise<void>
-  oauthEnd(authId: string): TwitterAuth | undefined
+  oauthEnd(authId: string): TwitterUserAuth | undefined
+}
+
+export const oauthClientWith = (twitterConfig: TwitterConfig): OAuthClient =>
+  new OAuth(
+    "https://twitter.com/oauth/request_token",
+    "https://twitter.com/oauth/access_token",
+    twitterConfig.adminAuth.consumer_key,
+    twitterConfig.adminAuth.consumer_secret,
+    "1.0",
+    twitterConfig.callbackURI,
+    "HMAC-SHA1",
+  )
+
+export const oauthClientMock = (): OAuthClient => {
+  const map = new Map<string, string>()
+
+  return {
+    getOAuthRequestToken(callback: OAuthClientCallback): void {
+      const token = uuid()
+      const token_secret = uuid()
+      map.set(token, token_secret)
+      callback(undefined, token, token_secret)
+    },
+    getOAuthAccessToken(
+      oauth_token: string,
+      oauth_token_secret: string,
+      _oauth_verifier: string,
+      callback: (err: any, token: string, token_secret: string) => void,
+    ): void {
+      const token_secret = map.get(oauth_token)
+      if (token_secret !== oauth_token_secret) throw new Error("Failed.")
+      map.delete(oauth_token)
+      callback(undefined, oauth_token, oauth_token_secret)
+    },
+  }
 }
 
 export const oauthServiceWith =
-  (twitterConfig: TwitterConfig): OAuthService => {
-    const { adminAuth } = twitterConfig
+  (oauthClient: OAuthClient): OAuthService => {
     const tokenSecrets = new Map<string, { authId: string; token_secret: string }>()
-    const auths = new Map<string, TwitterAuth>()
+    const auths = new Map<string, TwitterUserAuth>()
 
-    const oauthClient =
-      new OAuth(
-        "https://twitter.com/oauth/request_token",
-        "https://twitter.com/oauth/access_token",
-        twitterConfig.adminAuth.consumer_key,
-        twitterConfig.adminAuth.consumer_secret,
-        "1.0",
-        twitterConfig.callbackURI,
-        "HMAC-SHA1",
-      )
     return {
       /** Called after the user requested to be authenticated. */
       oauthRequest: (authId: string) =>
-        new Promise<{ redirect: string }>((resolve, reject) => {
+        new Promise<{ oauth_token: string, redirect: string }>((resolve, reject) => {
           oauthClient.getOAuthRequestToken((err, token, token_secret) => {
-            if (err) {
-              return reject(err)
-            }
+            if (err) return reject(err)
 
             const redirectURI = `${REST_API_AUTH}?oauth_token=${token}`
 
             // Save secret data internally.
             tokenSecrets.set(token, { authId, token_secret })
 
-            resolve({ redirect: redirectURI })
+            resolve({ oauth_token: token, redirect: redirectURI })
           })
         }),
       /** Called after the twitter redirected to the callback api. */
@@ -102,15 +137,13 @@ export const oauthServiceWith =
           const { authId, token_secret } = secret
 
           oauthClient.getOAuthAccessToken(token, token_secret, verifier, (err, token, token_secret) => {
-            if (err) {
-              return reject(err)
-            }
+            if (err) return reject(err)
 
-            const userAuth = { ...adminAuth, token, token_secret }
-            auths.set(authId, userAuth)
+            auths.set(authId, { token, token_secret })
             resolve()
           })
         }),
+      /** Called by the client app to obtain access token/secret. */
       oauthEnd: (authId: string) => {
         if (!auths.get(authId)) {
           return undefined
@@ -128,7 +161,10 @@ export const oauthServiceStub = (): OAuthService => {
   return {
     async oauthRequest(authId: string) {
       requests.set("my_token", authId)
-      return { redirect: "/api/twitter-auth-callback?oauth_token=my_token" }
+      return {
+        oauth_token: "my_token",
+        redirect: "/api/twitter-auth-callback?oauth_token=my_token",
+      }
     },
     async oauthCallback(params: OAuthCallbackParams) {
       auths.set(requests.get(params.oauth_token)!, {} as TwitterAuth)

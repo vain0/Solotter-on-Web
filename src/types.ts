@@ -1,8 +1,19 @@
-export interface TwitterAuth {
-  consumer_key: string
-  consumer_secret: string
+interface TestToolkit {
+  describe(name: string, callback: () => void | Promise<void>): void
+  test(name: string, callback: () => void | Promise<void>): void
+  is<T>(left: T, right: T): void
+}
+
+export type TestSuite = (toolkit: TestToolkit) => void
+
+export interface TwitterUserAuth {
   token: string
   token_secret: string
+}
+
+export interface TwitterAuth extends TwitterUserAuth {
+  consumer_key: string
+  consumer_secret: string
 }
 
 export interface TwitterConfig {
@@ -16,7 +27,7 @@ export interface TwitterConfig {
 }
 
 export interface AccessUser {
-  auth: TwitterAuth
+  userAuth: TwitterUserAuth
   displayName: string
   screenName: string
 }
@@ -27,14 +38,16 @@ type MaybePick<T, K extends keyof T> =
 export type NextState<P, S, K extends keyof S> =
   ((prevState: Readonly<S>, props: Readonly<P>) => MaybePick<S, K>) | MaybePick<S, K>
 
+export interface KeyValueStorage {
+  has(key: string): boolean
+  get(key: string): unknown | undefined
+  set(key: string, value: unknown): void
+}
+
 export interface AppState {
   loading: boolean
   authId: string
   accessUser: AccessUser | undefined
-}
-
-export interface TweetProps {
-  accessUser: AccessUser
 }
 
 export interface TweetState {

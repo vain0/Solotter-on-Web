@@ -1,7 +1,7 @@
 import * as React from 'react';
 import * as ReactDOM from 'react-dom';
-import { AccessUser, NextState, TwitterAuth } from '../types';
 import uuid from 'uuid/v4';
+import { AccessUser, NextState, TwitterAuth } from '../types';
 
 const fetchPOST = (pathname: string, body: unknown) => {
   return fetch(pathname, {
@@ -20,13 +20,13 @@ const fetchPOST = (pathname: string, body: unknown) => {
 };
 
 const retrieveAuthId = () => {
-  let authId = window.localStorage.getItem("solotterAuthId");
+  let authId = window.localStorage.getItem('solotterAuthId');
   if (!authId) {
     authId = uuid();
-    window.localStorage.setItem("solotterAuthId", authId);
+    window.localStorage.setItem('solotterAuthId', authId);
   }
   return authId;
-}
+};
 
 const retrieveTwitterAuth = () => {
   const twitterAuthJson = window.localStorage.getItem('twitterAuth');
@@ -42,8 +42,8 @@ const saveTwitterAuth = (auth: TwitterAuth) => {
 const apiAuthEnd = async (authId: string) => {
   const data = await fetchPOST('/api/twitter-auth-end', { authId });
   const { userAuth } = data as { userAuth: TwitterAuth | undefined };
-  return userAuth
-}
+  return userAuth;
+};
 
 const apiAccessUser = async (auth: TwitterAuth) => {
   const data = await fetchPOST('/api/users/name', { auth });
@@ -69,7 +69,7 @@ const retrieveAccessUser = async (authId: string) => {
     }
   }
   return undefined;
-}
+};
 
 interface AppState {
   loading: boolean;
@@ -136,7 +136,7 @@ class WelcomeComponent extends React.Component<{ authId: string }, {}> {
           </p>
 
           <form method='POST' action='/api/twitter-auth-request'>
-            <input type="hidden" name="authId" value={this.props.authId} />
+            <input type='hidden' name='authId' value={this.props.authId} />
             <button>Login with Twitter</button>
           </form>
         </main>

@@ -1,14 +1,14 @@
 import { config as dotEnvConfig } from 'dotenv';
 import express from 'express';
 import * as path from 'path';
+import uuid from 'uuid/v4';
 import { exhaust } from '../utils';
-import { oauthServiceWith, oauthServiceStub } from './infra-twitter';
+import { oauthServiceStub, oauthServiceWith } from './infra-twitter';
 import {
   ServerRouter,
   serverRouterWith,
 } from './routing';
 import { TestSuite } from './testing';
-import uuid from "uuid/v4"
 
 const parseAuthHeader = (a: string | undefined): string | undefined => {
   const s = a && a.split(' ') || [];
@@ -67,8 +67,8 @@ export const serve = (props: ServeProps) => {
   const { port, publicDir, serverRoute } = props;
   const app = express();
 
-  app.use(express.json())
-  app.use(express.urlencoded({ extended: true }))
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
   app.use(serverRoute);
 
   app.listen(port, () => {
@@ -119,28 +119,28 @@ export const serveTests: TestSuite = ({ test, is }) => {
   });
 
   test('auth flow', async () => {
-    const serverRouter = serverRouterWith(oauthServiceStub())
+    const serverRouter = serverRouterWith(oauthServiceStub());
 
     // Firstly user requests auth by clicking button.
     const authId = uuid();
     const r1 = await serverRouter.resolve({
       pathname: '/api/twitter-auth-request',
       body: { authId },
-    })
-    is("redirect" in r1, true)
+    });
+    is('redirect' in r1, true);
 
     // After redirect, twitter auth, then redirect to the callback api.
     const r2 = await serverRouter.resolve({
       pathname: '/api/twitter-auth-callback',
-      query: { oauth_token: 'my_token', oauth_verifier: 'my_verifier', },
-    })
-    is("redirect" in r2, true)
+      query: { oauth_token: 'my_token', oauth_verifier: 'my_verifier' },
+    });
+    is('redirect' in r2, true);
 
     // The client fetches auth tokens.
     const auth = await serverRouter.resolve({
       pathname: '/api/twitter-auth-end',
-      body: { authId }
-    })
-    is(auth !== undefined, true)
-  })
+      body: { authId },
+    });
+    is(auth !== undefined, true);
+  });
 };

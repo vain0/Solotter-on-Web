@@ -25,8 +25,8 @@ export const serverRouterWith = (oauthService: OAuthService) => {
     {
       path: '/api/twitter-auth-request',
       async action({ body }) {
-        const { authId } = body as { authId: string }
-        return await oauthService.oauthRequest(authId)
+        const { authId } = body as { authId: string };
+        return await oauthService.oauthRequest(authId);
       },
     },
     {
@@ -40,10 +40,10 @@ export const serverRouterWith = (oauthService: OAuthService) => {
     {
       path: '/api/twitter-auth-end',
       async action({ body }) {
-        const { authId } = body as { authId: string }
-        const userAuth = await oauthService.oauthEnd(authId)
-        return { json: { userAuth } }
-      }
+        const { authId } = body as { authId: string };
+        const userAuth = await oauthService.oauthEnd(authId);
+        return { json: { userAuth } };
+      },
     },
     {
       // Except for the above three, we require valid authorization header.
@@ -74,8 +74,8 @@ export const serverRouterWith = (oauthService: OAuthService) => {
       path: '(.*)',
       action({ next }) {
         return next();
-      }
-    }
+      },
+    },
   ]);
 };
 

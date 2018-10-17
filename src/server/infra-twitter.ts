@@ -53,7 +53,7 @@ interface OAuthCallbackParams {
 export interface OAuthService {
   oauthRequest(authId: string): Promise<{ redirect: string }>;
   oauthCallback(params: OAuthCallbackParams): Promise<void>;
-  oauthEnd(authId: string): TwitterAuth | undefined
+  oauthEnd(authId: string): TwitterAuth | undefined;
 }
 
 export const oauthServiceWith =
@@ -99,7 +99,7 @@ export const oauthServiceWith =
             return reject('Invalid auth flow.');
           }
           tokenSecrets.delete(token);
-          const { authId, token_secret } = secret
+          const { authId, token_secret } = secret;
 
           oauthClient.getOAuthAccessToken(token, token_secret, verifier, (err, token, token_secret) => {
             if (err) {
@@ -113,12 +113,12 @@ export const oauthServiceWith =
         }),
       oauthEnd: (authId: string) => {
         if (!auths.get(authId)) {
-          return undefined
+          return undefined;
         }
         const userAuth = auths.get(authId);
         auths.delete(authId);
         return userAuth;
-      }
+      },
     };
   };
 
@@ -127,17 +127,17 @@ export const oauthServiceStub = (): OAuthService => {
   let auths = new Map<string, TwitterAuth>();
   return {
     async oauthRequest(authId: string) {
-      requests.set("my_token", authId)
-      return { redirect: '/api/twitter-auth-callback?oauth_token=my_token' }
+      requests.set('my_token', authId);
+      return { redirect: '/api/twitter-auth-callback?oauth_token=my_token' };
     },
     async oauthCallback(params: OAuthCallbackParams) {
-      auths.set(requests.get(params.oauth_token)!, {} as TwitterAuth)
+      auths.set(requests.get(params.oauth_token)!, {} as TwitterAuth);
     },
     oauthEnd(authId: string) {
       return auths.get(authId)!;
-    }
-  }
-}
+    },
+  };
+};
 
 export const apiGet = async (req: TwitterRestGetRequest & TwitterRestAuth) => {
   const { pathname, oauth, qs } = req;

@@ -86,8 +86,8 @@ class TweetComponent extends React.Component<TweetProps, TweetState> {
   }
 
   private getFullName() {
-    const { displayName, screenName } = this.props.accessUser
-    return `${displayName} @${screenName}`
+    const { userAuth: { screen_name } } = this.props.accessUser
+    return `@${screen_name}`
   }
 
   private onTextChange(text: string) {

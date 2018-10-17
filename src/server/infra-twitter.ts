@@ -50,7 +50,7 @@ interface OAuthCallbackParams {
   oauth_verifier: string
 }
 
-type OAuthClientCallback = (err: any, token: string, token_secret: string) => void
+type OAuthClientCallback = (err: any, token: string, token_secret: string, result?: unknown) => void
 
 interface OAuthClient {
   getOAuthRequestToken(callback: OAuthClientCallback): void
@@ -94,12 +94,12 @@ export const oauthClientMock = (): OAuthClient => {
       oauth_token: string,
       oauth_token_secret: string,
       _oauth_verifier: string,
-      callback: (err: any, token: string, token_secret: string) => void,
+      callback: OAuthClientCallback,
     ): void {
       const token_secret = map.get(oauth_token)
       if (token_secret !== oauth_token_secret) throw new Error("Failed.")
       map.delete(oauth_token)
-      callback(undefined, oauth_token, oauth_token_secret)
+      callback(undefined, oauth_token, oauth_token_secret, { screen_name: "john_doe" })
     },
   }
 }
@@ -136,12 +136,15 @@ export const oauthServiceWith =
           tokenSecrets.delete(token)
           const { authId, token_secret } = secret
 
-          oauthClient.getOAuthAccessToken(token, token_secret, verifier, (err, token, token_secret) => {
-            if (err) return reject(err)
+          oauthClient.getOAuthAccessToken(token, token_secret, verifier,
+            (err, token, token_secret, results) => {
+              if (err) return reject(err)
 
-            auths.set(authId, { token, token_secret })
-            resolve()
-          })
+              const { screen_name } = results as any
+              if (!screen_name) throw new Error("scree_nname not provided.")
+              auths.set(authId, { token, token_secret, screen_name })
+              resolve()
+            })
         }),
       /** Called by the client app to obtain access token/secret. */
       oauthEnd: (authId: string) => {
@@ -154,26 +157,6 @@ export const oauthServiceWith =
       },
     }
   }
-
-export const oauthServiceStub = (): OAuthService => {
-  let requests = new Map<string, string>()
-  let auths = new Map<string, TwitterAuth>()
-  return {
-    async oauthRequest(authId: string) {
-      requests.set("my_token", authId)
-      return {
-        oauth_token: "my_token",
-        redirect: "/api/twitter-auth-callback?oauth_token=my_token",
-      }
-    },
-    async oauthCallback(params: OAuthCallbackParams) {
-      auths.set(requests.get(params.oauth_token)!, {} as TwitterAuth)
-    },
-    oauthEnd(authId: string) {
-      return auths.get(authId)!
-    },
-  }
-}
 
 export const apiGet = async (req: TwitterRestGetRequest & TwitterRestAuth) => {
   const { pathname, oauth, qs } = req

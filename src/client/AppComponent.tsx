@@ -1,75 +1,12 @@
 import * as React from "react"
 import * as ReactDOM from "react-dom"
-import uuid from "uuid/v4"
-import { AccessUser, NextState, TwitterAuth } from "../types"
-
-const fetchPOST = (pathname: string, body: unknown) => {
-  return fetch(pathname, {
-    method: "POST",
-    body: JSON.stringify(body),
-    headers: {
-      "content-type": "application/json",
-    },
-  }).then(res => {
-    if (!res.ok) throw new Error("fetch request failed")
-    return res.json() as Promise<unknown>
-  }, err => {
-    console.error(err)
-    throw err
-  })
-}
-
-const retrieveAuthId = () => {
-  let authId = window.localStorage.getItem("solotterAuthId")
-  if (!authId) {
-    authId = uuid()
-    window.localStorage.setItem("solotterAuthId", authId)
-  }
-  return authId
-}
-
-const retrieveTwitterAuth = () => {
-  const twitterAuthJson = window.localStorage.getItem("twitterAuth")
-  return twitterAuthJson && JSON.parse(twitterAuthJson) as TwitterAuth
-}
-
-const maybeLoggedIn = () => !!retrieveTwitterAuth()
-
-const saveTwitterAuth = (auth: TwitterAuth) => {
-  window.localStorage.setItem("twitterAuth", JSON.stringify(auth))
-}
-
-const apiAuthEnd = async (authId: string) => {
-  const data = await fetchPOST("/api/twitter-auth-end", { authId })
-  const { userAuth } = data as { userAuth: TwitterAuth | undefined }
-  return userAuth
-}
-
-const apiAccessUser = async (auth: TwitterAuth) => {
-  const data = await fetchPOST("/api/users/name", { auth })
-  const user = data as { displayName: string; screenName: string }
-  return { ...user, auth }
-}
-
-const retrieveAccessUser = async (authId: string) => {
-  // In case you are already logged in.
-  {
-    const auth = retrieveTwitterAuth()
-    if (auth) {
-      return await apiAccessUser(auth)
-    }
-  }
-
-  // In case it's at the end of auth flow.
-  {
-    const auth = await apiAuthEnd(authId)
-    if (auth) {
-      saveTwitterAuth(auth)
-      return await apiAccessUser(auth)
-    }
-  }
-  return undefined
-}
+import { AccessUser, NextState } from "../types"
+import {
+  fetchPOST,
+  maybeLoggedIn,
+  retrieveAccessUser,
+  retrieveAuthId,
+} from "./infra-browser"
 
 interface AppState {
   loading: boolean

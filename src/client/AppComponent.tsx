@@ -1,18 +1,12 @@
 import * as React from "react"
 import * as ReactDOM from "react-dom"
-import { AccessUser, NextState } from "../types"
+import { AppState, NextState, TweetProps, TweetState } from "../types"
 import {
   fetchPOST,
   maybeLoggedIn,
   retrieveAccessUser,
   retrieveAuthId,
 } from "./infra-browser"
-
-interface AppState {
-  loading: boolean
-  authId: string
-  accessUser: AccessUser | undefined
-}
 
 class AppComponent extends React.Component<{}, AppState> {
   constructor(props: {}) {
@@ -80,15 +74,6 @@ class WelcomeComponent extends React.Component<{ authId: string }, {}> {
       </article>
     )
   }
-}
-
-interface TweetProps {
-  accessUser: AccessUser
-}
-
-interface TweetState {
-  loading: boolean
-  text: string
 }
 
 class TweetComponent extends React.Component<TweetProps, TweetState> {

@@ -3,20 +3,23 @@
 import uuid from "uuid/v4"
 import { TwitterAuth } from "../types"
 
-export const fetchPOST = (pathname: string, body: unknown) => {
-  return fetch(pathname, {
-    method: "POST",
-    body: JSON.stringify(body),
-    headers: {
-      "content-type": "application/json",
-    },
-  }).then(res => {
-    if (!res.ok) throw new Error("fetch request failed")
-    return res.json() as Promise<unknown>
-  }, err => {
+export const fetchPOST = async (pathname: string, body: unknown) => {
+  try {
+    const res = await fetch(pathname, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: {
+        "content-type": "application/json",
+      },
+    })
+    if (!res.ok) {
+      throw new Error("Fetch request failed.")
+    }
+    return (await res.json()) as unknown
+  } catch (err) {
     console.error(err)
     throw err
-  })
+  }
 }
 
 export const retrieveAuthId = () => {

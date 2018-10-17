@@ -26,3 +26,18 @@ type MaybePick<T, K extends keyof T> =
 
 export type NextState<P, S, K extends keyof S> =
   ((prevState: Readonly<S>, props: Readonly<P>) => MaybePick<S, K>) | MaybePick<S, K>
+
+export interface AppState {
+  loading: boolean
+  authId: string
+  accessUser: AccessUser | undefined
+}
+
+export interface TweetProps {
+  accessUser: AccessUser
+}
+
+export interface TweetState {
+  loading: boolean
+  text: string
+}

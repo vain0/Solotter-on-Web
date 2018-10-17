@@ -12,86 +12,99 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const universal_router_1 = __importDefault(require("universal-router"));
-exports.serverRouterWith = (oauthService) => {
+class ServerAPIServer {
+    constructor(oauthService) {
+        this.oauthService = oauthService;
+    }
+    "/api/twitter-auth-request"(req) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { authId } = req;
+            const { oauth_token, redirect } = yield this.oauthService.oauthRequest(authId);
+            return { json: { oauth_token }, redirect };
+        });
+    }
+    "/api/twitter-auth-callback"(query) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield this.oauthService.oauthCallback(query);
+            return { json: {}, redirect: "/" };
+        });
+    }
+    "/api/twitter-auth-end"(body) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { authId } = body;
+            const userAuth = yield this.oauthService.oauthEnd(authId);
+            return { json: { userAuth } };
+        });
+    }
+    "/api/users/name"(body) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return {
+                json: {
+                    userAuth: body.userAuth,
+                    displayName: "John Doe",
+                    screenName: "tap",
+                },
+            };
+        });
+    }
+    "/api/tweet"(body) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return {
+                json: {
+                    err: "unimpl",
+                },
+            };
+        });
+    }
+}
+exports.ServerAPIServer = ServerAPIServer;
+exports.serverRouterWith = (apiServer) => {
+    const paths = Object.getOwnPropertyNames(ServerAPIServer.prototype);
+    const preAuth = paths.filter(p => p.startsWith("/api/twitter-auth-"));
+    const postAuth = paths.filter(p => p.startsWith("/") && !p.startsWith("/api/twitter-auth-"));
+    const route = (path) => {
+        return {
+            path,
+            action: ({ body }) => {
+                const res = apiServer[path](body);
+                return res;
+            },
+        };
+    };
+    const authHandler = {
+        path: "/api/(.*)",
+        action({ body, next }) {
+            return __awaiter(this, void 0, void 0, function* () {
+                if ("userAuth" in body && body.userAuth !== undefined) {
+                    return yield next(true);
+                }
+                return { forbidden: true };
+            });
+        },
+    };
+    const forwardHandler = {
+        path: "(.*)",
+        action({ next }) {
+            return next();
+        },
+    };
     return new universal_router_1.default([
-        {
-            path: '/api/twitter-auth-request',
-            action({ body }) {
-                return __awaiter(this, void 0, void 0, function* () {
-                    const { authId } = body;
-                    return yield oauthService.oauthRequest(authId);
-                });
-            },
-        },
-        {
-            path: '/api/twitter-auth-callback',
-            action(context) {
-                return __awaiter(this, void 0, void 0, function* () {
-                    const q = context.query;
-                    yield oauthService.oauthCallback(q);
-                    return { redirect: '/' };
-                });
-            },
-        },
-        {
-            path: '/api/twitter-auth-end',
-            action({ body }) {
-                return __awaiter(this, void 0, void 0, function* () {
-                    const { authId } = body;
-                    const userAuth = yield oauthService.oauthEnd(authId);
-                    return { json: { userAuth } };
-                });
-            }
-        },
-        {
-            // Except for the above two, we require valid authorization header.
-            path: '/api/(.*)',
-            action(context) {
-                return __awaiter(this, void 0, void 0, function* () {
-                    if (context.auth === undefined) {
-                        return { json: { forbidden: 'bad' } };
-                    }
-                    return yield context.next(true);
-                });
-            },
-        },
-        {
-            path: '/api/users/name',
-            action() {
-                return __awaiter(this, void 0, void 0, function* () {
-                    // FIXME: Fetch
-                    return { json: { displayName: 'John Doe', screenName: 'tap' } };
-                });
-            },
-        },
-        {
-            path: '/api/tweet',
-            action(context) {
-                return __awaiter(this, void 0, void 0, function* () {
-                    const { status } = context.body;
-                    console.log(status);
-                    return { json: { ok: true } };
-                });
-            },
-        },
-        {
-            path: '(.*)',
-            action({ next }) {
-                return next();
-            }
-        }
+        ...preAuth.map(route),
+        authHandler,
+        ...postAuth.map(route),
+        forwardHandler,
     ]);
 };
 exports.pageRouter = new universal_router_1.default([
     {
-        path: ['/styles/(.*)', '/scripts/(.*)', '/favicon.ico'],
+        path: ["/styles/(.*)", "/scripts/(.*)", "/favicon.ico"],
         action() {
             return { static: true };
         },
     },
     {
         // Fallback to static file server.
-        path: '(.*)',
+        path: "(.*)",
         action() {
             return { index: true };
         },

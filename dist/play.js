@@ -13,8 +13,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 exports.play = () => __awaiter(this, void 0, void 0, function* () {
-    const host = process.env.HOST || 'localhost';
-    const port = +(process.env.PORT || '8080');
+    const host = process.env.HOST || "localhost";
+    const port = +(process.env.PORT || "8080");
     const oauth = {
         consumer_key: process.env.TWITTER_CONSUMER_KEY,
         consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
@@ -26,11 +26,11 @@ exports.play = () => __awaiter(this, void 0, void 0, function* () {
         adminAuth: oauth,
     };
     if (!Object.keys(oauth).every(k => oauth[k])) {
-        return console.error('Set up .env');
+        return console.error("Set up .env");
     }
     const app = express_1.default();
     const router = express_1.default.Router();
-    router.all('(.*)', (req, res) => {
+    router.all("(.*)", (req, res) => {
         console.error({ pathname: req.path, query: req.query, body: req.body });
         return res.sendStatus(200);
     });

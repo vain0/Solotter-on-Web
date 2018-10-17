@@ -21,56 +21,58 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const assert = __importStar(require("assert"));
 const mocha_1 = require("mocha");
 const universal_router_1 = __importDefault(require("universal-router"));
+const integ_spec_1 = require("./integ.spec");
 const serve_1 = require("./server/serve");
 const toolkit = {
     describe: mocha_1.describe,
     test: mocha_1.test,
     is: assert.deepStrictEqual,
 };
-mocha_1.test('hello', () => {
+mocha_1.describe("serveTests", () => serve_1.serveTests(toolkit));
+mocha_1.describe("integTests", () => integ_spec_1.integTests(toolkit));
+mocha_1.test("hello", () => {
     assert.strictEqual(1 + 2 * 3, 7);
 });
-mocha_1.describe('serveTests', () => serve_1.serveTests(toolkit));
-mocha_1.describe('JavaScript', () => {
-    mocha_1.describe('String', () => {
-        const r = new RegExp('^Bearer ([a-fA-F0-9]+)$');
-        mocha_1.test('it should match', () => {
-            const match = 'Bearer deadbeaf'.match(r);
-            assert.strictEqual(match && match[1], 'deadbeaf');
+mocha_1.describe("JavaScript", () => {
+    mocha_1.describe("String", () => {
+        const r = new RegExp("^Bearer ([a-fA-F0-9]+)$");
+        mocha_1.test("it should match", () => {
+            const match = "Bearer deadbeaf".match(r);
+            assert.strictEqual(match && match[1], "deadbeaf");
         });
-        mocha_1.test('it should not match', () => {
-            const second = 'Basic YWxhZGRpbjpvcGVuc2VzYW1l'.match(r);
+        mocha_1.test("it should not match", () => {
+            const second = "Basic YWxhZGRpbjpvcGVuc2VzYW1l".match(r);
             assert.strictEqual(second && second[1], null);
         });
     });
 });
-mocha_1.describe('universal-router', () => {
+mocha_1.describe("universal-router", () => {
     const { is } = toolkit;
-    mocha_1.test('next', () => __awaiter(this, void 0, void 0, function* () {
+    mocha_1.test("next", () => __awaiter(this, void 0, void 0, function* () {
         const router = new universal_router_1.default([
             {
-                path: '/',
-                action: () => '/',
+                path: "/",
+                action: () => "/",
             },
             {
-                path: '(.*)',
+                path: "(.*)",
                 action({ auth, next }) {
                     if (auth) {
                         return next();
                     }
                     else {
-                        return '/forbidden';
+                        return "/forbidden";
                     }
                 },
             },
             {
-                path: '/secret',
-                action: () => '/secret',
+                path: "/secret",
+                action: () => "/secret",
             },
         ]);
-        is(yield router.resolve({ pathname: '/', auth: false }), '/');
-        is(yield router.resolve({ pathname: '/secret', auth: false }), '/forbidden');
-        is(yield router.resolve({ pathname: '/secret', auth: true }), '/secret');
+        is(yield router.resolve({ pathname: "/", auth: false }), "/");
+        is(yield router.resolve({ pathname: "/secret", auth: false }), "/forbidden");
+        is(yield router.resolve({ pathname: "/secret", auth: true }), "/secret");
     }));
 });
 //# sourceMappingURL=index.spec.js.map

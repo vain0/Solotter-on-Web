@@ -33,11 +33,11 @@ const serverRouteWith = (serverRouter, serveStatic) => {
             if (result === undefined || result === null) {
                 throw new Error("Unexpectedly result is null or undefined.");
             }
-            else if ("json" in result) {
-                return res.json(result.json);
-            }
             else if ("redirect" in result) {
                 return res.redirect(301, result.redirect);
+            }
+            else if ("json" in result) {
+                return res.json(result.json);
             }
             else if ("forbidden" in result) {
                 return res.sendStatus(403);
@@ -83,12 +83,14 @@ exports.bootstrap = () => {
             consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
             token: process.env.TWITTER_ACCESS_TOKEN,
             token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET,
+            screen_name: process.env.TWITTER_ADMIN_SCREEN_NAME,
         },
     };
     const serveStatic = express_1.default.static(publicDir, { fallthrough: true, redirect: false });
     const oauthClient = infra_twitter_1.oauthClientWith(twitterConfig);
     const oauthService = infra_twitter_1.oauthServiceWith(oauthClient);
-    const apiServer = new routing_1.ServerAPIServer(oauthService);
+    const twitterServiceFn = (userAuth) => (new infra_twitter_1.TwitterAPIServerClass(Object.assign({}, twitterConfig, { userAuth })));
+    const apiServer = new routing_1.ServerAPIServer(oauthService, twitterServiceFn);
     const serverRouter = routing_1.serverRouterWith(apiServer);
     const serverRoute = serverRouteWith(serverRouter, serveStatic);
     exports.serve({

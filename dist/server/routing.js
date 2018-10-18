@@ -13,8 +13,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const universal_router_1 = __importDefault(require("universal-router"));
 class ServerAPIServer {
-    constructor(oauthService) {
+    constructor(oauthService, twitterServiceFn) {
         this.oauthService = oauthService;
+        this.twitterServiceFn = twitterServiceFn;
+    }
+    twitterService({ userAuth }) {
+        return this.twitterServiceFn(userAuth);
     }
     "/api/twitter-auth-request"(req) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -33,7 +37,7 @@ class ServerAPIServer {
         return __awaiter(this, void 0, void 0, function* () {
             const { authId } = body;
             const userAuth = yield this.oauthService.oauthEnd(authId);
-            return { json: { userAuth } };
+            return { json: userAuth && { userAuth } };
         });
     }
     "/api/users/name"(body) {
@@ -47,13 +51,15 @@ class ServerAPIServer {
             };
         });
     }
-    "/api/tweet"(body) {
+    "/api/statuses/update"(body) {
         return __awaiter(this, void 0, void 0, function* () {
-            return {
-                json: {
-                    err: "unimpl",
+            const err = yield this.twitterService(body)["/statuses/update"]({
+                body: {
+                    status: body.status,
+                    trim_user: true,
                 },
-            };
+            }).then(() => undefined).catch(err => err);
+            return { json: { err } };
         });
     }
 }
@@ -61,7 +67,7 @@ exports.ServerAPIServer = ServerAPIServer;
 exports.serverRouterWith = (apiServer) => {
     const paths = Object.getOwnPropertyNames(ServerAPIServer.prototype);
     const preAuth = paths.filter(p => p.startsWith("/api/twitter-auth-"));
-    const postAuth = paths.filter(p => p.startsWith("/") && !p.startsWith("/api/twitter-auth-"));
+    const postAuth = paths.filter(p => p.startsWith("/api/") && !p.startsWith("/api/twitter-auth-"));
     const route = (path) => {
         return {
             path,

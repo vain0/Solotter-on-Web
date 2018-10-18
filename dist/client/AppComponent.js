@@ -64,7 +64,8 @@ class TweetComponent extends React.Component {
         super(props);
         this.state = {
             loading: false,
-            text: "",
+            message: "",
+            status: "",
         };
     }
     /** Promisified `setState`. */
@@ -72,18 +73,26 @@ class TweetComponent extends React.Component {
         return new Promise(resolve => this.setState(nextState, resolve));
     }
     getFullName() {
-        const { displayName, screenName } = this.props.accessUser;
-        return `${displayName} @${screenName}`;
+        const { userAuth: { screen_name } } = this.props.accessUser;
+        return `@${screen_name}`;
     }
-    onTextChange(text) {
-        this.setState({ text });
+    onTextChange(status) {
+        this.setState({ status });
     }
     submit() {
         return __awaiter(this, void 0, void 0, function* () {
+            const { accessUser: { userAuth } } = this.props;
+            const { status } = this.state;
             yield this.update({ loading: true });
             try {
-                yield infra_browser_1.fetchPOST("/api/tweet", { text: this.state.text });
-                yield this.update({ text: "" });
+                const { err } = yield infra_browser_1.fetchPOST("/api/statuses/update", { status, userAuth });
+                if (err === undefined) {
+                    yield this.update({ status: "", message: "Success!" });
+                }
+                else {
+                    yield this.update({ message: "Sorry, it could not be submitted." });
+                }
+                setTimeout(() => this.update({ message: "" }), 8000);
             }
             finally {
                 yield this.update({ loading: false });
@@ -92,15 +101,16 @@ class TweetComponent extends React.Component {
     }
     render() {
         const fullName = this.getFullName();
-        const { loading, text } = this.state;
+        const { loading, message, status } = this.state;
         return (React.createElement("article", { id: "tweet-component" },
             React.createElement("header", null,
                 React.createElement("h1", null, "Solotter | Tweet")),
             React.createElement("main", null,
                 React.createElement("div", { className: "user-name" }, fullName),
                 React.createElement("form", { className: "tweet-form", onSubmit: ev => { ev.preventDefault(); this.submit(); } },
-                    React.createElement("textarea", { className: "tweet-textarea", rows: 4, placeholder: "What are you doing?", readOnly: loading, value: text || "", onChange: ev => this.onTextChange(ev.target.value) }),
-                    React.createElement("button", { className: "tweet-button", disabled: loading }, "Submit")))));
+                    React.createElement("textarea", { className: "tweet-textarea", rows: 4, placeholder: "What are you doing?", required: true, maxLength: 280, readOnly: loading, value: status || "", onChange: ev => this.onTextChange(ev.target.value) }),
+                    React.createElement("button", { className: "tweet-button", disabled: loading }, "Submit"),
+                    React.createElement("div", { className: "tweet-message", hidden: !message }, message)))));
     }
 }
 exports.main = () => __awaiter(this, void 0, void 0, function* () {

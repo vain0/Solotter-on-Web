@@ -21,6 +21,10 @@ exports.fetchPOST = (pathname, body) => __awaiter(this, void 0, void 0, function
         if (!res.ok) {
             throw new Error("Fetch request failed.");
         }
+        const len = res.headers.get("Content-Length");
+        if (!len || Number(len) <= 0) {
+            return {};
+        }
         return (yield res.json());
     }
     catch (err) {

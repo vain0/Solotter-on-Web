@@ -21,14 +21,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const oauth_1 = require("oauth");
 const request = __importStar(require("request-promise-native"));
 const v4_1 = __importDefault(require("uuid/v4"));
+const utils_1 = require("../utils");
 const USER_AGENT = "solotter-web";
 const REST_API_BASE = "https://api.twitter.com/1.1";
 const REST_API_AUTH = "https://twitter.com/oauth/authenticate";
-const headers = {
-    Accept: "*/*",
-    Connection: "close",
-    "User-Agent": USER_AGENT,
-};
 exports.oauthClientWith = (twitterConfig) => new oauth_1.OAuth("https://twitter.com/oauth/request_token", "https://twitter.com/oauth/access_token", twitterConfig.adminAuth.consumer_key, twitterConfig.adminAuth.consumer_secret, "1.0", twitterConfig.callbackURI, "HMAC-SHA1");
 exports.oauthClientMock = () => {
     const map = new Map();
@@ -44,7 +40,7 @@ exports.oauthClientMock = () => {
             if (token_secret !== oauth_token_secret)
                 throw new Error("Failed.");
             map.delete(oauth_token);
-            callback(undefined, oauth_token, oauth_token_secret);
+            callback(undefined, oauth_token, oauth_token_secret, { screen_name: "john_doe" });
         },
     };
 };
@@ -72,10 +68,13 @@ exports.oauthServiceWith = (oauthClient) => {
             }
             tokenSecrets.delete(token);
             const { authId, token_secret } = secret;
-            oauthClient.getOAuthAccessToken(token, token_secret, verifier, (err, token, token_secret) => {
+            oauthClient.getOAuthAccessToken(token, token_secret, verifier, (err, token, token_secret, results) => {
                 if (err)
                     return reject(err);
-                auths.set(authId, { token, token_secret });
+                const { screen_name } = results;
+                if (!screen_name)
+                    throw new Error("scree_nname not provided.");
+                auths.set(authId, { token, token_secret, screen_name });
                 resolve();
             });
         }),
@@ -90,30 +89,12 @@ exports.oauthServiceWith = (oauthClient) => {
         },
     };
 };
-exports.oauthServiceStub = () => {
-    let requests = new Map();
-    let auths = new Map();
-    return {
-        oauthRequest(authId) {
-            return __awaiter(this, void 0, void 0, function* () {
-                requests.set("my_token", authId);
-                return {
-                    oauth_token: "my_token",
-                    redirect: "/api/twitter-auth-callback?oauth_token=my_token",
-                };
-            });
-        },
-        oauthCallback(params) {
-            return __awaiter(this, void 0, void 0, function* () {
-                auths.set(requests.get(params.oauth_token), {});
-            });
-        },
-        oauthEnd(authId) {
-            return auths.get(authId);
-        },
-    };
+const headers = {
+    Accept: "*/*",
+    Connection: "close",
+    "User-Agent": USER_AGENT,
 };
-exports.apiGet = (req) => __awaiter(this, void 0, void 0, function* () {
+exports.apiGET = (req) => __awaiter(this, void 0, void 0, function* () {
     const { pathname, oauth, qs } = req;
     const url = `${REST_API_BASE}${pathname}.json`;
     return yield request.get(url, {
@@ -123,14 +104,39 @@ exports.apiGet = (req) => __awaiter(this, void 0, void 0, function* () {
         json: true,
     });
 });
-exports.apiPost = (req) => __awaiter(this, void 0, void 0, function* () {
+exports.apiPOST = (req) => __awaiter(this, void 0, void 0, function* () {
     const { pathname, oauth, body } = req;
-    const url = `${REST_API_BASE}${pathname}.json`;
-    return yield request.get(url, {
-        oauth,
-        body,
-        headers,
+    const url = `${pathname}.json`;
+    return yield request.post(url, {
+        baseUrl: REST_API_BASE,
         json: true,
+        headers,
+        oauth,
+        qs: body,
     });
 });
+class TwitterAPIServerClass {
+    constructor(config) {
+        this.config = config;
+    }
+    oauth() {
+        const { consumer_key, consumer_secret } = this.config.adminAuth;
+        const { token, token_secret } = this.config.userAuth;
+        return {
+            consumer_key, consumer_secret,
+            token, token_secret,
+        };
+    }
+    "/statuses/show"(_) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return utils_1.unimpl();
+        });
+    }
+    "/statuses/update"({ body }) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return exports.apiPOST({ pathname: "/statuses/update", body, oauth: this.oauth() });
+        });
+    }
+}
+exports.TwitterAPIServerClass = TwitterAPIServerClass;
 //# sourceMappingURL=infra-twitter.js.map

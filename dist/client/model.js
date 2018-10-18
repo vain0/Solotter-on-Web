@@ -12,6 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const v4_1 = __importDefault(require("uuid/v4"));
+const utils_1 = require("../utils");
 class AppModel {
     constructor(apiClient, storage) {
         this.apiClient = apiClient;
@@ -25,10 +26,10 @@ class AppModel {
                     return accessUser;
             }
             // In case it's at the end of auth flow; or before anything happen.
-            const { userAuth } = yield this.apiClient.post("/api/twitter-auth-end", { authId });
+            const { userAuth } = utils_1.partial(yield this.apiClient.post("/api/twitter-auth-end", { authId }).catch());
             if (!userAuth)
                 return undefined;
-            const accessUser = yield this.apiClient.post("/api/users/name", { userAuth });
+            const accessUser = yield this.apiClient.post("/api/users/name", { userAuth }).catch();
             if (!accessUser)
                 return undefined;
             this.saveAccessUesr(accessUser);

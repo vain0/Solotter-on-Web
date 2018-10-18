@@ -9,6 +9,7 @@ export type TestSuite = (toolkit: TestToolkit) => void
 export interface TwitterUserAuth {
   token: string
   token_secret: string
+  screen_name: string
 }
 
 export interface TwitterAuth extends TwitterUserAuth {
@@ -19,7 +20,7 @@ export interface TwitterAuth extends TwitterUserAuth {
 export interface TwitterConfig {
   callbackURI: string
   adminAuth: TwitterAuth
-  userAuth?: TwitterAuth
+  userAuth?: TwitterUserAuth
   oauthState?: {
     token: string,
     token_secret: string,
@@ -28,8 +29,6 @@ export interface TwitterConfig {
 
 export interface AccessUser {
   userAuth: TwitterUserAuth
-  displayName: string
-  screenName: string
 }
 
 type MaybePick<T, K extends keyof T> =
@@ -52,5 +51,6 @@ export interface AppState {
 
 export interface TweetState {
   loading: boolean
-  text: string
+  message: string
+  status: string
 }

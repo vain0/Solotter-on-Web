@@ -1,6 +1,10 @@
 
 export const exhaust = (x: never) => x
 
-export const partial = <T>(obj: T | null | undefined): Partial<T> => {
+export const unimpl = () => {
+  throw new Error("unimpl")
+}
+
+export const partial = <T>(obj: T | void | null | undefined): Partial<T> => {
   return obj || {}
 }

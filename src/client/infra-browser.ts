@@ -15,6 +15,10 @@ export const fetchPOST = async (pathname: string, body: unknown) => {
     if (!res.ok) {
       throw new Error("Fetch request failed.")
     }
+    const len = res.headers.get("Content-Length")
+    if (!len || Number(len) <= 0) {
+      return {}
+    }
     return (await res.json()) as unknown
   } catch (err) {
     console.error(err)

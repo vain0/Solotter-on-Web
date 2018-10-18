@@ -2,9 +2,9 @@ import { config as dotEnvConfig } from "dotenv"
 import express from "express"
 import * as path from "path"
 import uuid from "uuid/v4"
-import { TestSuite } from "../types"
+import { TestSuite, TwitterUserAuth } from "../types"
 import { exhaust } from "../utils"
-import { oauthClientWith, oauthServiceStub, oauthServiceWith } from "./infra-twitter"
+import { oauthClientWith, oauthServiceWith, TwitterAPIServerClass } from "./infra-twitter"
 import {
   ServerAPIServer,
   ServerRouter,
@@ -32,10 +32,10 @@ const serverRouteWith =
       }).then(result => {
         if (result === undefined || result === null) {
           throw new Error("Unexpectedly result is null or undefined.")
-        } else if ("json" in result) {
-          return res.json(result.json)
         } else if ("redirect" in result) {
           return res.redirect(301, result.redirect)
+        } else if ("json" in result) {
+          return res.json(result.json)
         } else if ("forbidden" in result) {
           return res.sendStatus(403)
         } else {
@@ -94,13 +94,16 @@ export const bootstrap = () => {
       consumer_secret: process.env.TWITTER_CONSUMER_SECRET!,
       token: process.env.TWITTER_ACCESS_TOKEN!,
       token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET!,
+      screen_name: process.env.TWITTER_ADMIN_SCREEN_NAME!,
     },
   }
 
   const serveStatic = express.static(publicDir, { fallthrough: true, redirect: false })
   const oauthClient = oauthClientWith(twitterConfig)
   const oauthService = oauthServiceWith(oauthClient)
-  const apiServer = new ServerAPIServer(oauthService)
+  const twitterServiceFn = (userAuth: TwitterUserAuth) =>
+    (new TwitterAPIServerClass({ ...twitterConfig, userAuth }))
+  const apiServer = new ServerAPIServer(oauthService, twitterServiceFn)
   const serverRouter = serverRouterWith(apiServer)
   const serverRoute = serverRouteWith(serverRouter, serveStatic)
 

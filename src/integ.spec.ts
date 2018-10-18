@@ -1,15 +1,15 @@
 import uuid from "uuid/v4"
 import { APIClient, APIReq, APIRes, APISchema } from "./api"
 import { AppModel } from "./client/model"
-import { oauthClientMock, oauthServiceWith } from "./server/infra-twitter"
+import { oauthClientMock, oauthServiceWith, TwitterAPIServerClass } from "./server/infra-twitter"
 import { ServerAPIServer, serverRouterWith } from "./server/routing"
 import { KeyValueStorage, TestSuite } from "./types"
-import { exhaust } from "./utils"
+import { exhaust, unimpl } from "./utils"
 
 export const integTests: TestSuite = ({ describe, is, test }) => {
   test("auth flow", async () => {
     const oauthService = oauthServiceWith(oauthClientMock())
-    const apiServer = new ServerAPIServer(oauthService)
+    const apiServer = new ServerAPIServer(oauthService, unimpl)
     const serverRouter = serverRouterWith(apiServer)
 
     const apiClient: APIClient = {

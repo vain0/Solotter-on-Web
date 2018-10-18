@@ -14,14 +14,17 @@ export interface APISchema {
   }
   "/api/twitter-auth-end": {
     request: { authId: string }
-    response: { userAuth: TwitterUserAuth | undefined },
+    response: { userAuth: TwitterUserAuth } | undefined,
   }
   "/api/users/name": {
     request: { userAuth: TwitterUserAuth },
     response: AccessUser | undefined,
   }
-  "/api/tweet": {
-    request: { userAuth: TwitterUserAuth },
+  "/api/statuses/update": {
+    request: {
+      userAuth: TwitterUserAuth
+      status: string,
+    },
     response: { err: any },
   }
 }

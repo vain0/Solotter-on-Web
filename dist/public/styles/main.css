@@ -141,3 +141,12 @@ body {
     margin: 16px 0;
     padding: 4px 8px;
 }
+
+#tweet-component .tweet-message {
+    margin: 16px 4px;
+    padding: 4px 8px;
+    border-radius: 4px;
+
+    background: var(--accent-color-light);
+    color: var(--accent-color-text);
+}

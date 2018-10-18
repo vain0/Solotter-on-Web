@@ -1,16 +1,12 @@
 import { OAuth } from "oauth"
 import * as request from "request-promise-native"
 import uuid from "uuid/v4"
-import { TwitterAuth, TwitterConfig, TwitterUserAuth } from "../types"
+import { TwitterConfig, TwitterUserAuth } from "../types"
+import { unimpl } from "../utils"
 
 const USER_AGENT = "solotter-web"
 const REST_API_BASE = "https://api.twitter.com/1.1"
 const REST_API_AUTH = "https://twitter.com/oauth/authenticate"
-
-export interface OAuthCallbackQuery {
-  oauth_token: string
-  oauth_verifier: string
-}
 
 interface TwitterRestAuth {
   oauth: {
@@ -21,28 +17,41 @@ interface TwitterRestAuth {
   }
 }
 
-type TwitterRestGetRequest =
-  | {
-    pathname: "/statuses/show",
-    qs: {
+interface TwitterAPI {
+  "/statuses/show": {
+    method: "GET",
+    query: {
       id: string,
     },
+    response: {},
   }
-
-type TwitterRestPostRequest =
-  | {
-    pathname: "/statuses/update",
+  "/statuses/update": {
+    method: "POST",
     body: {
       status: string,
       in_reply_to_status_id?: string,
       trim_user: true,
     },
+    res: {},
   }
+}
 
-const headers = {
-  Accept: "*/*",
-  Connection: "close",
-  "User-Agent": USER_AGENT,
+type TwitterAPIQuery<P extends keyof TwitterAPI> =
+  TwitterAPI[P] extends { query: infer Q } ? Q : {}
+
+type TwitterAPIBody<P extends keyof TwitterAPI> =
+  TwitterAPI[P] extends { body: infer Q } ? Q : {}
+
+type TwitterAPIRes<P extends keyof TwitterAPI> =
+  TwitterAPI[P] extends { res: infer Q } ? Q : {}
+
+type TwitterAPIReq<P extends keyof TwitterAPI> = {
+  query?: TwitterAPIQuery<P>,
+  body?: TwitterAPIBody<P>,
+}
+
+export type TwitterAPIServer = {
+  [P in keyof TwitterAPI]: (this: TwitterAPIServer, req: TwitterAPIReq<P>) => Promise<TwitterAPIRes<P>>
 }
 
 interface OAuthCallbackParams {
@@ -158,7 +167,13 @@ export const oauthServiceWith =
     }
   }
 
-export const apiGet = async (req: TwitterRestGetRequest & TwitterRestAuth) => {
+const headers = {
+  Accept: "*/*",
+  Connection: "close",
+  "User-Agent": USER_AGENT,
+}
+
+export const apiGET = async (req: { pathname: string, qs: unknown } & TwitterRestAuth) => {
   const { pathname, oauth, qs } = req
 
   const url = `${REST_API_BASE}${pathname}.json`
@@ -171,15 +186,39 @@ export const apiGet = async (req: TwitterRestGetRequest & TwitterRestAuth) => {
   })
 }
 
-export const apiPost = async (req: TwitterRestPostRequest & TwitterRestAuth) => {
+export const apiPOST = async (req: { pathname: string, body: unknown } & TwitterRestAuth) => {
   const { pathname, oauth, body } = req
 
-  const url = `${REST_API_BASE}${pathname}.json`
+  const url = `${pathname}.json`
 
-  return await request.get(url, {
-    oauth,
-    body,
-    headers,
+  return await request.post(url, {
+    baseUrl: REST_API_BASE,
     json: true,
+    headers,
+    oauth,
+    qs: body,
   })
+}
+
+export class TwitterAPIServerClass implements TwitterAPIServer {
+  constructor(
+    private readonly config: TwitterConfig,
+  ) {
+  }
+
+  oauth() {
+    const { consumer_key, consumer_secret } = this.config.adminAuth
+    const { token, token_secret } = this.config.userAuth!
+    return {
+      consumer_key, consumer_secret,
+      token, token_secret,
+    }
+  }
+
+  async "/statuses/show"(_: TwitterAPIReq<"/statuses/show">) {
+    return unimpl()
+  }
+  async "/statuses/update"({ body }: TwitterAPIReq<"/statuses/update">) {
+    return apiPOST({ pathname: "/statuses/update", body, oauth: this.oauth() })
+  }
 }

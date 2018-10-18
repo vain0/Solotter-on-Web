@@ -20,8 +20,11 @@ export interface APISchema {
     request: { userAuth: TwitterUserAuth },
     response: AccessUser | undefined,
   }
-  "/api/tweet": {
-    request: { userAuth: TwitterUserAuth },
+  "/api/statuses/update": {
+    request: {
+      userAuth: TwitterUserAuth
+      status: string,
+    },
     response: { err: any },
   }
 }

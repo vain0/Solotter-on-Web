@@ -20,7 +20,7 @@ export interface TwitterAuth extends TwitterUserAuth {
 export interface TwitterConfig {
   callbackURI: string
   adminAuth: TwitterAuth
-  userAuth?: TwitterAuth
+  userAuth?: TwitterUserAuth
   oauthState?: {
     token: string,
     token_secret: string,
@@ -51,5 +51,6 @@ export interface AppState {
 
 export interface TweetState {
   loading: boolean
-  text: string
+  message: string
+  status: string
 }

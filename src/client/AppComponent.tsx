@@ -76,7 +76,8 @@ class TweetComponent extends React.Component<TweetProps, TweetState> {
 
     this.state = {
       loading: false,
-      text: "",
+      message: "",
+      status: "",
     }
   }
 
@@ -90,15 +91,23 @@ class TweetComponent extends React.Component<TweetProps, TweetState> {
     return `@${screen_name}`
   }
 
-  private onTextChange(text: string) {
-    this.setState({ text })
+  private onTextChange(status: string) {
+    this.setState({ status })
   }
 
   private async submit() {
+    const { accessUser: { userAuth } } = this.props
+    const { status } = this.state
+
     await this.update({ loading: true })
     try {
-      await fetchPOST("/api/tweet", { text: this.state.text })
-      await this.update({ text: "" })
+      const { err } = await fetchPOST("/api/statuses/update", { status, userAuth }) as any
+      if (err === undefined) {
+        await this.update({ status: "", message: "Success!" })
+      } else {
+        await this.update({ message: "Sorry, it could not be submitted." })
+      }
+      setTimeout(() => this.update({ message: "" }), 8000)
     } finally {
       await this.update({ loading: false })
     }
@@ -106,7 +115,7 @@ class TweetComponent extends React.Component<TweetProps, TweetState> {
 
   render() {
     const fullName = this.getFullName()
-    const { loading, text } = this.state
+    const { loading, message, status } = this.state
 
     return (
       <article id="tweet-component">
@@ -126,8 +135,9 @@ class TweetComponent extends React.Component<TweetProps, TweetState> {
               className="tweet-textarea"
               rows={4}
               placeholder="What are you doing?"
+              required maxLength={280}
               readOnly={loading}
-              value={text || ""}
+              value={status || ""}
               onChange={ev => this.onTextChange(ev.target.value)}
             />
 
@@ -136,6 +146,10 @@ class TweetComponent extends React.Component<TweetProps, TweetState> {
               disabled={loading}>
               Submit
             </button>
+
+            <div className="tweet-message" hidden={!message}>
+              {message}
+            </div>
           </form>
         </main>
       </article>

@@ -1,6 +1,7 @@
+import { TwitterConfig, TwitterUserAuth } from "src/types"
 import Router, { ActionContext } from "universal-router"
 import { APIReq, APIServer } from "../api"
-import { OAuthService } from "./infra-twitter"
+import { OAuthService, TwitterAPIServer, TwitterAPIServerClass } from "./infra-twitter"
 
 interface RouteContext {
   body: unknown
@@ -21,7 +22,12 @@ type GetRouteResult =
 export class ServerAPIServer implements APIServer {
   constructor(
     private readonly oauthService: OAuthService,
+    private readonly twitterServiceFn: (userAuth: TwitterUserAuth) => TwitterAPIServer,
   ) {
+  }
+
+  twitterService({ userAuth }: { userAuth: TwitterUserAuth }) {
+    return this.twitterServiceFn(userAuth)
   }
 
   async "/api/twitter-auth-request"(req: APIReq<"/api/twitter-auth-request">) {
@@ -51,12 +57,14 @@ export class ServerAPIServer implements APIServer {
     }
   }
 
-  async "/api/tweet"(body: APIReq<"/api/tweet">) {
-    return {
-      json: {
-        err: "unimpl",
+  async "/api/statuses/update"(body: APIReq<"/api/statuses/update">) {
+    const err = await this.twitterService(body)["/statuses/update"]({
+      body: {
+        status: body.status,
+        trim_user: true,
       },
-    }
+    }).then(() => undefined).catch(err => err)
+    return { json: { err } }
   }
 }
 
@@ -65,7 +73,7 @@ export type ServerRouter = Router<RouteContext, RouteResult>
 export const serverRouterWith = (apiServer: APIServer) => {
   const paths = Object.getOwnPropertyNames(ServerAPIServer.prototype)
   const preAuth = paths.filter(p => p.startsWith("/api/twitter-auth-"))
-  const postAuth = paths.filter(p => p.startsWith("/") && !p.startsWith("/api/twitter-auth-"))
+  const postAuth = paths.filter(p => p.startsWith("/api/") && !p.startsWith("/api/twitter-auth-"))
 
   const route = (path: string) => {
     return {
